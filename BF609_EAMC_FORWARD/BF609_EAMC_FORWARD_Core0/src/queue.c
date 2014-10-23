@@ -8,6 +8,8 @@
 #include "stdlib_bf.h"
 #include "queue.h"
 
+#define QUEUE_BUFFER_SIZE (12800)
+
 status InitQueue ( QType *pQ )
 {
 	pQ->front = pQ->rear = 0;

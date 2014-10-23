@@ -13,6 +13,9 @@
 //#include "post_common.h"
 //#include "post_debug.h"
 
+//who defined NULL
+#include "stddef.h"
+
 #if defined(__DEBUG_FILE__)
 #include <string.h>
 extern FILE *pDebugFile;				/* debug file when directing output to a file */

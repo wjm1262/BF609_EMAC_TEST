@@ -16,9 +16,9 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,com.analog.crosscore.managedbuilder.buildType=com.analog.crosscore.managedbuilder.buildType.debug" cleanCommand="clean" description="" id="blackfin.toolchain.configuration.debug.1434941338" name="Debug" parent="blackfin.toolchain.configuration.debug">
+				<configuration artifactExtension="ldr" artifactName="${ProjName}" buildArtefactType="com.analog.crosscore.managedbuilder.core.buildArtefactType.ldr" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=com.analog.crosscore.managedbuilder.core.buildArtefactType.ldr,com.analog.crosscore.managedbuilder.buildType=com.analog.crosscore.managedbuilder.buildType.debug" cleanCommand="clean" description="" id="blackfin.toolchain.configuration.debug.1434941338" name="Debug" parent="blackfin.toolchain.configuration.debug" postbuildStep="" preannouncebuildStep="cldp -proc ADSP-BF609 -emu 100b -driver E:\BF609_LOAD_DRIVER\bf609_pc28f128p33_dpia.dxe -cmd info -cmd prog -erase affected -format bin -file E:\BF609_EAMC_FORWARD\BF609_EAMC_FORWARD_Core0\Debug\BF609_EAMC_FORWARD_Core0.ldr">
 					<folderInfo id="blackfin.toolchain.configuration.debug.1434941338." name="/" resourcePath="">
-						<toolChain id="blackfin.toolchain.debug.520697845" isAbstract="false" name="CrossCore Blackfin Toolchain" superClass="blackfin.toolchain" targetTool="blackfin.toolchain.linker">
+						<toolChain id="blackfin.toolchain.debug.520697845" isAbstract="false" name="CrossCore Blackfin Toolchain" superClass="blackfin.toolchain" targetTool="blackfin.toolchain.loader">
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="blackfin.platform.307565369" name="CrossCore Blackfin Target Platform" osList="all" superClass="blackfin.platform"/>
 							<builder buildPath="${workspace_loc:/BF609_EAMC_FORWARD_Core0/Debug}" id="blackfin.toolchain.builder.379618981" keepEnvironmentInBuildfile="false" name="CrossCore Blackfin Builder" superClass="blackfin.toolchain.builder"/>
 							<tool id="blackfin.toolchain.assembler.778808698" name="CrossCore Blackfin Assembler" superClass="blackfin.toolchain.assembler">
@@ -47,7 +47,6 @@
 								</option>
 								<option id="compiler.option.additionaldirectories.2041145684" name="Additional include directories (-I):" superClass="compiler.option.additionaldirectories" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/system}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/BF609_EAMC_FORWARD_Core0/VerUpdate}&quot;"/>
 								</option>
 								<inputType id="compiler.inputType.1550629105" name="C/C++ Source" superClass="compiler.inputType"/>
 							</tool>
@@ -75,6 +74,14 @@
 							<tool id="blackfin.toolchain.loader.1387054585" name="CrossCore Blackfin Loader" superClass="blackfin.toolchain.loader">
 								<option id="loader.option.proc.1390454444" name="-proc" superClass="loader.option.proc" value=" ADSP-BF609" valueType="string"/>
 								<option id="loader.option.sirevision.1162476248" name="-si-revision" superClass="loader.option.sirevision" value=" 0.0" valueType="string"/>
+								<option id="blackfin.loader.option.enumerated.bootmode.1869376963" name="Boot mode (-b)" superClass="blackfin.loader.option.enumerated.bootmode" value="Memory" valueType="enumerated"/>
+								<option id="blackfin.loader.option.enumerated.progflag.81823023" name="Programmable flag" superClass="blackfin.loader.option.enumerated.progflag"/>
+								<option id="blackfin.loader.option.enumerated.bootformat.346674853" name="Boot format (-f)" superClass="blackfin.loader.option.enumerated.bootformat" value="blackfin.loader.option.format.enumerated.binary" valueType="enumerated"/>
+								<option id="blackfin.loader.option.enumerated.width.2053238687" name="Output width (-width)" superClass="blackfin.loader.option.enumerated.width" value="blackfin.loader.option.width.enumerated.sixteen" valueType="enumerated"/>
+								<option id="blackfin.loader.option.additionaloptions.1333082853" name="Additional options:" superClass="blackfin.loader.option.additionaloptions" valueType="stringList">
+									<listOptionValue builtIn="false" value="-bcode 0x06"/>
+								</option>
+								<option id="blackfin.loader.option.initfile.1113265193" name="Initialization file" superClass="blackfin.loader.option.initfile" value="C:\Analog Devices\CrossCore Embedded Studio 1.0.3\Blackfin\ldr\BF609_init_v00.dxe" valueType="string"/>
 							</tool>
 						</toolChain>
 					</folderInfo>
@@ -100,9 +107,9 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,com.analog.crosscore.managedbuilder.buildType=com.analog.crosscore.managedbuilder.buildType.release" cleanCommand="clean" description="" id="blackfin.toolchain.configuration.release.64509563" name="Release" parent="blackfin.toolchain.configuration.release">
+				<configuration artifactExtension="ldr" artifactName="${ProjName}" buildArtefactType="com.analog.crosscore.managedbuilder.core.buildArtefactType.ldr" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=com.analog.crosscore.managedbuilder.core.buildArtefactType.ldr,com.analog.crosscore.managedbuilder.buildType=com.analog.crosscore.managedbuilder.buildType.release" cleanCommand="clean" description="" id="blackfin.toolchain.configuration.release.64509563" name="Release" parent="blackfin.toolchain.configuration.release">
 					<folderInfo id="blackfin.toolchain.configuration.release.64509563." name="/" resourcePath="">
-						<toolChain id="blackfin.toolchain.release.1186109242" isAbstract="false" name="CrossCore Blackfin Toolchain" superClass="blackfin.toolchain" targetTool="blackfin.toolchain.linker">
+						<toolChain id="blackfin.toolchain.release.1186109242" isAbstract="false" name="CrossCore Blackfin Toolchain" superClass="blackfin.toolchain" targetTool="blackfin.toolchain.loader">
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="blackfin.platform.650528419" name="CrossCore Blackfin Target Platform" osList="all" superClass="blackfin.platform"/>
 							<builder buildPath="${workspace_loc:/BF609_EAMC_FORWARD_Core0/Release}" id="blackfin.toolchain.builder.657755517" keepEnvironmentInBuildfile="false" name="CrossCore Blackfin Builder" superClass="blackfin.toolchain.builder"/>
 							<tool id="blackfin.toolchain.assembler.1487824176" name="CrossCore Blackfin Assembler" superClass="blackfin.toolchain.assembler">
@@ -158,6 +165,7 @@
 							<tool id="blackfin.toolchain.loader.784519977" name="CrossCore Blackfin Loader" superClass="blackfin.toolchain.loader">
 								<option id="loader.option.proc.1134195746" name="-proc" superClass="loader.option.proc" value=" ADSP-BF609" valueType="string"/>
 								<option id="loader.option.sirevision.2059911857" name="-si-revision" superClass="loader.option.sirevision" value=" 0.0" valueType="string"/>
+								<option id="blackfin.loader.option.enumerated.bootmode.915562928" name="Boot mode (-b)" superClass="blackfin.loader.option.enumerated.bootmode" value="Memory" valueType="enumerated"/>
 							</tool>
 						</toolChain>
 					</folderInfo>

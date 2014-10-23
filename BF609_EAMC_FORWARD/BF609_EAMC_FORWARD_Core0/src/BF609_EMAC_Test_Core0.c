@@ -18,67 +18,74 @@
 
 #include "adi_gemac_int.h"
 
-#include "xl-6004_forward_protocol.h"
 #include "arith.h" //handle time
 
-#include "BF609_Update_Protocol.h"
-#include "VerUpdate.h"
+#include "mem_manager.h"
+#include "queue.h"
 
-//////////////////////////////////////////
+#include "xl-6004_forward_protocol.h"
 
-#define MIN_ETHER_FRAME_LEN 64
-#define MAX_ETHER_FRAME_LEN 1600
+#define EMAC0_NUM_RECV_DESC    (1200)  /*! Number of receive DMA descriptors  */
+#define EMAC0_NUM_XMIT_DESC    (10)  /*! Number of transmit DMA descriptors */
+#define EMAC1_NUM_RECV_DESC    (100)  /*! Number of receive DMA descriptors  */
+#define EMAC1_NUM_XMIT_DESC    (1200)  /*! Number of transmit DMA descriptors */
+
 
 /*! Enters critical region */
 #define ENTER_CRITICAL_REGION()  (adi_osal_EnterCriticalRegion())
 /*! Exit critical region */
 #define EXIT_CRITICAL_REGION()   (adi_osal_ExitCriticalRegion())
 
-
-/*! size of the memory block to allocate to the stack.  */
-#define ETHER_STACK_SIZE          (1024*1024*10)
-
 //
 void HandleLoop(void);
 void Init_UART(void);
 int EtherSend ( ADI_ETHER_HANDLE  const hDevice, ADI_ETHER_BUFFER *tx_frame );
 ADI_ETHER_BUFFER *EtherRecv ( ADI_ETHER_HANDLE  const hDevice );
-static int InitBuff ( const unsigned int inMemSize, char *MemArea, ADI_ETHER_HANDLE hDevice, ETH_CFG_INFO *bsInfo );
-static int InitFrameBuff ( ADI_ETHER_HANDLE  const hDevice, ETH_CFG_INFO *bsInfo );
-static ADI_ETHER_BUFFER *PackEtherFrame ( char *EthFrmHeader, int HeaderLen, char *EthFrmData, int DataLen, ETH_CFG_INFO *bsInfo );
 
 
-/* ADI_EMAC_FRAME_Q manegment */
-void               clear_queue ( ADI_EMAC_FRAME_Q *pQueue );
-ADI_ETHER_BUFFER  *pop_queue ( ADI_EMAC_FRAME_Q *pQueue );
-int                push_queue ( ADI_EMAC_FRAME_Q *pQueue, ADI_ETHER_BUFFER  *pElem );
-/********************************/
-
-extern void Init_PTPAuxin(void);
-extern void Enable_Time_Stamp_Auxin_Interrupt(void);
-extern void enable_rx ( ADI_ETHER_HANDLE phDevice );
-extern void enable_tx ( ADI_ETHER_HANDLE phDevice );
-extern void SetFlexiblePPSOutput( ADI_ETHER_HANDLE phDevice, PPS_TYPE ePPSType, TimeInternal tmStart,
-									unsigned int uPPSInterval,unsigned int uPPSWidth);
-extern void ResetSysTime(ADI_ETHER_HANDLE phDevice);
-//enable emac tx,rx
-extern void enable_emac_tx_rx ( ADI_ETHER_HANDLE phDevice );
 
 /* configures the soft switches */
 void ConfigSoftSwitches ( void );
-
-
-
 
 void External_PPS_Trigger_Callback ( ADI_GPIO_PIN_INTERRUPT   const ePinInt,
 									uint32_t                 const Data,
 									void*                    pCBParam);
 
 /* ***　　global vars　　****************/
+
+/*! size of the memory block to allocate to the stack.  */
+const unsigned g_contEthHeapSize[2]={1024*1024*12,1024*1024*12};
+
 ADI_ETHER_HANDLE 		g_hDev[MAX_NETWORK_IF] = {0};
 ADI_ETHER_DRIVER_ENTRY 	*g_pDevEntry[MAX_NETWORK_IF] = {&GEMAC0DriverEntry, &GEMAC1DriverEntry};
 ETHERNET_CALLBACK_FUN 	g_pEthCallBack[MAX_NETWORK_IF] = {Ethernet0_Callback, Ethernet1_Callback};
 int 					g_AuxiTMIsFirstUpdated = 1;
+
+#pragma alignment_region (32)
+uint8_t BaseMemSize0[32];
+uint8_t MemRcve0[EMAC0_NUM_RECV_DESC * 32]; /*! Receive DMA descriptor memory  */
+uint8_t MemXmit0[EMAC0_NUM_XMIT_DESC * 32]; /*! Transmit DMA descriptor memory */
+
+uint8_t BaseMemSize1[32];
+uint8_t MemRcve1[EMAC1_NUM_RECV_DESC * 32]; /*! Receive DMA descriptor memory  */
+uint8_t MemXmit1[EMAC1_NUM_XMIT_DESC * 32]; /*! Transmit DMA descriptor memory */
+#pragma alignment_region_end
+
+/* Initialize the Memory Table */
+ADI_ETHER_MEM memtable[MAX_NETWORK_IF] =
+{
+	{
+		MemRcve0, sizeof ( MemRcve0 ),
+		MemXmit0, sizeof ( MemXmit0 ),
+		BaseMemSize0, sizeof ( BaseMemSize0 )
+	},
+	{
+		MemRcve1, sizeof ( MemRcve1 ),
+		MemXmit1, sizeof ( MemXmit1 ),
+		BaseMemSize1, sizeof ( BaseMemSize1 )
+	}
+};
+
 
 void main ( void )
 {
@@ -160,7 +167,7 @@ void main ( void )
 		memcpy ( ( ( ADI_EMAC_DEVICE * ) hEthernet )->MacAddress, user_net_config_info[i].hwaddr, 6 );
 
 		/* allocate memory  */
-		ether_stack_block = heap_malloc ( i+1, ETHER_STACK_SIZE );
+		ether_stack_block = heap_malloc ( i+1, g_contEthHeapSize[i] );
 		if ( ether_stack_block == NULL )
 		{
 			DEBUG_PRINT ( " heap_malloc: in heap %d, failed to allocate memory to the stack \n\n" , i+1);
@@ -168,8 +175,10 @@ void main ( void )
 		}
 		
 		/* init buf mem */
-		nRet = InitBuff ( ETHER_STACK_SIZE, ether_stack_block, hEthernet, &user_net_config_info[i] );
-		if(nRet<0)
+		nRet = InitBuff ( g_contEthHeapSize[i],
+				ether_stack_block, hEthernet,
+				&user_net_config_info[i] );
+		if( nRet<0 )
 		{
 			DEBUG_STATEMENT ( " InitBuff: failed to enable Init Buffs\n\n" );
 			return ;
@@ -213,8 +222,7 @@ void main ( void )
 
 void HandleLoop(void)
 {
-	FORWARD_ETHER_FRAME_BUFFER ForwardFrmBuff;
-	BF609_ETHE_FRAME* pForwardFrm = NULL;
+	FORWARD_ETHER_FRAME* pForwardFrm = NULL;
 
 	ADI_ETHER_BUFFER *pRecv = NULL,*pSend = NULL;
 
@@ -222,7 +230,7 @@ void HandleLoop(void)
 
 	ADI_ETHER_FRAME_BUFFER *pPkt = NULL;
 
-	int FrmLen = 0;
+	uint32_t FrmLen = 0;
 
 	unsigned int nanSeconds = 0;
 	BF609_COMM_ACK_CODE commRet;
@@ -240,10 +248,9 @@ void HandleLoop(void)
 			// get frame length
 			FrmLen = pRecv->ProcessedElementCount - 6; //adi_gemac.c process_int 中 加了6 bytes，WHY???
 
-			//send a frame by eth1
-			PackForwardFrmHeader ( &ForwardFrmBuff , ( char * ) &nanSeconds );
-			pPkt = ( ADI_ETHER_FRAME_BUFFER * ) ( pRecv->Data );
-			pSend = PackEtherFrame ( ( char * ) &ForwardFrmBuff, 14, ( char * ) pPkt->Dest, FrmLen, &user_net_config_info[1] );
+			//send a frame by emac1
+			pSend = PackForwardSMVFrame ( nanSeconds, (char*)pRecv->Data +2,
+					FrmLen,  &user_net_config_info[1] );
 
 			EtherSend ( g_hDev[1], pSend );
 
@@ -252,25 +259,19 @@ void HandleLoop(void)
 			pRecv->ProcessedElementCount = 0;
 			pRecv->ProcessedFlag = 0;
 			adi_ether_Read ( g_hDev[0], pRecv );
-
 		}//if ( pRecv )
 
 		// recv a frame from Eth1;
 		pRecv = EtherRecv ( g_hDev[1] );
 		if( pRecv )
 		{
-			//process frm...
-			pForwardFrm = ( BF609_ETHE_FRAME * ) ( pRecv->Data );
+ 			//process control messages frm...
+			pForwardFrm = ( FORWARD_ETHER_FRAME * ) ( pRecv->Data );
 
-			if( pForwardFrm->MU_Addr == board_info.DA )
+			if( pForwardFrm->MUAddr == board_info.MUAddr )
 			{
-				commRet = VerUpdate((uint8_t*)pForwardFrm);
+				HandleControlMessage((uint8_t*)pForwardFrm);
 			}
-			else
-			{
-				commRet = NAK_ERROR_DESTADDR_UNMATCH;
-			}
-
 
 			//reuse recv buff
 			pRecv->pNext = NULL;
@@ -280,6 +281,8 @@ void HandleLoop(void)
 		}
 	}//while
 }
+
+
 
 /////////////CALL_BACK
 void External_PPS_Trigger_Callback (
@@ -316,7 +319,6 @@ void Ethernet0_Callback ( void *arg1, unsigned int event, void *FrameBuffers )
 
 	ADI_ETHER_BUFFER *pRecv;
 	
-	
 
 	if ( pack_list != NULL )
 	{
@@ -345,7 +347,6 @@ void Ethernet0_Callback ( void *arg1, unsigned int event, void *FrameBuffers )
 					//Notes: 过滤其他非SV报文  by wjm@ 204-8-8
 					//if ( pUChar[16] == 0x88 && pUChar[17] == 0xba )
 					//Notes:只做纯粹的接收、打时标、协议转发工作，报文过滤交由上层应用处理， by wjm@2014-8-16 AM 10:21
-					
 					EnQueue ( &user_net_config_info[0].rx_completed_q, pRecv );
 					
 				}
@@ -378,7 +379,8 @@ void Ethernet1_Callback ( void *arg1, unsigned int event, void *FrameBuffers )
 {
 
 	ADI_ETHER_BUFFER *pack_list = ( ADI_ETHER_BUFFER * ) FrameBuffers;
-	ADI_ETHER_BUFFER *pRecv;
+	ADI_ETHER_BUFFER *pRecv, *pXmt;
+	ADI_ETHER_FRAME_BUFFER * pPkt;
 	
 	if ( pack_list != NULL )
 	{
@@ -399,9 +401,7 @@ void Ethernet1_Callback ( void *arg1, unsigned int event, void *FrameBuffers )
 				while ( pack_list )
 				{
 					pRecv = pack_list;
-					
 					pack_list = pack_list->pNext;
-					
 					pRecv->pNext = NULL;
 					
 					EnQueue ( &user_net_config_info[1].rx_completed_q, pRecv );
@@ -410,12 +410,55 @@ void Ethernet1_Callback ( void *arg1, unsigned int event, void *FrameBuffers )
 				break;
 				
 			case ADI_ETHER_EVENT_FRAME_XMIT:
-			
-				if ( pack_list )
+#if 0
+				while ( pack_list )
 				{
-					push_queue ( &user_net_config_info[1].xmt_queue, pack_list );
+					pXmt = pack_list;
+					pack_list = pack_list->pNext;
+					pXmt->pNext = NULL;
+
+					pPkt = ( ADI_ETHER_FRAME_BUFFER * ) ( pXmt->Data );
+
+					// forward SMV frame to PC
+					if( (pPkt->LTfield[0] == BF609_FORWARD_SMV_TYPE_LO) &&
+							(pPkt->LTfield[1] == BF609_FORWARD_SMV_TYPE_HI ))
+					{
+						//reuse buff, return the buff to EMAC0' RX Channel
+						pXmt->pNext = NULL;
+						pXmt->ProcessedElementCount = 0;
+						pXmt->ProcessedFlag = 0;
+						adi_ether_Read ( g_hDev[0], pXmt );
+					}
+					// send other frame to PC controller, such as ACK frame for control messages.
+					else
+					{
+						if( (pPkt->LTfield[0] == BF609_UPDATE_VER_ACKOK_TYPE_LO) &&
+								(pPkt->LTfield[1] == BF609_UPDATE_VER_ACKOK_TYPE_HI ))
+						{
+							g_ACKOK_XMT_Completed = 1;
+						}
+
+						push_queue ( &user_net_config_info[1].xmt_queue, pXmt );
+					}
 				}
-				
+#endif
+				while ( pack_list )
+				{
+					pXmt = pack_list;
+					pack_list = pack_list->pNext;
+					pXmt->pNext = NULL;
+
+					pPkt = ( ADI_ETHER_FRAME_BUFFER * ) ( pXmt->Data );
+
+					if( (pPkt->LTfield[0] == BF609_UPDATE_VER_ACKOK_TYPE_LO) &&
+							(pPkt->LTfield[1] == BF609_UPDATE_VER_ACKOK_TYPE_HI ))
+					{
+						g_ACKOK_XMT_Completed = 1;
+					}
+
+					push_queue ( &user_net_config_info[1].xmt_queue, pXmt );
+
+				}
 				break;
 				
 			case ADI_ETHER_EVENT_INTERRUPT:
@@ -485,382 +528,3 @@ ADI_ETHER_BUFFER *EtherRecv ( ADI_ETHER_HANDLE  const hDevice )
 	
 }
 
-
-static ADI_ETHER_BUFFER *PackEtherFrame ( char *EthFrmHeader, int HeaderLen, char *EthFrmData, int DataLen, ETH_CFG_INFO *bsInfo )
-{
-
-	ADI_ETHER_BUFFER *tx;
-	ADI_ETHER_FRAME_BUFFER *frm;
-	
-	char *head, *data, *Dst;
-	
-	unsigned short *ps;
-	
-	int  len;
-	
-	len = HeaderLen + DataLen;
-	
-	if ( len > bsInfo->tx_buff_datalen )
-	{
-		// frame too big for our buffers
-		DEBUG_PRINT ( " PackEtherFrame:  frame (Len:%d) too big for our buffers (Len:%d)\n\n", len, bsInfo->tx_buff_datalen );
-		return NULL;
-	}
-	
-	// remove first free one from the list
-	tx = pop_queue ( &bsInfo->xmt_queue );
-	
-	if ( tx == NULL )
-	{
-		DEBUG_STATEMENT ( " PackEtherFrame:  xmt_queue IS no free buff!\n\n " );
-		return NULL;
-	}
-	
-	// copy data from pbuf(s) into our buffer
-	head = EthFrmHeader;
-	data = EthFrmData;
-	
-	// the first two bytes reserved for length
-	Dst = ( char * ) tx->Data + 2;
-	
-	//
-	memcpy ( Dst, head, HeaderLen );
-	Dst += HeaderLen;
-	
-	memcpy ( Dst, data, DataLen );
-	
-	tx->ElementCount = len + 2; // total element count including 2 byte header
-		
-	ps = ( unsigned short * ) tx->Data;
-	*ps = tx->ElementCount - 2; // only the frame size excluding 2 byte header
-	tx->PayLoad =  0; // payload is part of the packet
-	tx->StatusWord = 0; // changes from 0 to the status info
-	
-	return tx;
-}
-
-
-
-/****************************************************************
- * Initialises, assigns Tx and Rx buffers to each
- * network interface.
- *
- * Buffer structure
- *
- *   ----------------  ---------------   -----------------------
- *   ADI_ETHER_BUFFER| buffer_overhead|  ADI_ETHER_FRAME_BUFFER
- *   ----------------  ----------------  -----------------------
- ****************************************************************/
-static int InitFrameBuff ( ADI_ETHER_HANDLE  const hDevice, ETH_CFG_INFO *bsInfo )
-{
-	ADI_ETHER_BUFFER *p;
-	
-	int rx_len, tx_len, count;
-	int i;
-	ADI_ETHER_BUFFER *rx_head = NULL;
-	ADI_ETHER_BUFFER *tx_head = NULL;
-	
-	char *buf;
-	
-	if ( !bsInfo || bsInfo->rx_buff_datalen < MIN_ETHER_FRAME_LEN ||
-			bsInfo->tx_buff_datalen < MIN_ETHER_FRAME_LEN )
-		return -1;
-		
-	if ( !bsInfo->buff_area || 0 >= bsInfo->buff_area_size )
-		return -1;
-		
-	clear_queue ( &bsInfo->xmt_queue );
-	
-	InitQueue ( &bsInfo->rx_completed_q );
-	InitQueue ( &bsInfo->tx_completed_q );
-	
-	// calculate total requirement for each rx and tx buffer
-	
-	rx_len = bsInfo->rx_len_align;
-	tx_len = bsInfo->tx_len_align;
-	
-	rx_len = ( ( rx_len + 3 ) / 4 ) * 4;
-	tx_len = ( ( tx_len + 3 ) / 4 ) * 4;
-	
-	rx_len = ( rx_len + 31 ) & ~31;
-	tx_len = ( tx_len + 31 ) & ~31;
-	
-	buf = ( char * ) ( ( ( unsigned int ) bsInfo->buff_area + 31 ) & ~31 );
-	
-	// allocate buffers in required ratio from supplied memory area
-	//while (bsInfo->buff_area_size > rx_len || bsInfo->buff_area_size > tx_len)
-	if ( bsInfo->buff_area_size > rx_len || bsInfo->buff_area_size > tx_len )
-	{
-		int n;
-		
-		for ( n = 0; n < bsInfo->rx_buffs; n += 1 )
-		{
-			if ( bsInfo->buff_area_size < rx_len )
-				break;
-				
-			p = ( ADI_ETHER_BUFFER * ) bsInfo->buff_area;
-			
-			bsInfo->buff_area += rx_len;
-			
-			bsInfo->buff_area_size -= rx_len;
-			
-			p->pNext = rx_head;
-			rx_head = p;
-		}
-		
-		for ( n = 0; n < bsInfo->tx_buffs; n += 1 )
-		{
-			if ( bsInfo->buff_area_size < tx_len )
-				break;
-				
-			p = ( ADI_ETHER_BUFFER * ) bsInfo->buff_area;
-			
-			bsInfo->buff_area += tx_len;
-			
-			bsInfo->buff_area_size -= tx_len;
-			
-			p->pNext = tx_head;
-			tx_head = p;
-			
-			if ( 0 == n )
-			{
-				bsInfo->xmt_queue.pQueueTail = p;
-			}
-		}
-	}
-	
-	// initialise each buffer's ADI_ETHER_BUFFER descriptor
-	p = rx_head;
-	count = 0;
-	
-	while ( p )
-	{
-		p->Data = ( char * ) p + sizeof ( ADI_ETHER_BUFFER ) + bsInfo->buff_overhead;
-		
-		p->ElementCount = bsInfo->rx_buff_datalen;
-		p->ElementWidth = 1;
-		p->CallbackParameter = p;
-		p->ProcessedElementCount = 0;
-		p->ProcessedFlag = 0;
-		p->PayLoad = 0;
-		p->x = 0;
-		
-		count += 1;
-		p = p->pNext;
-	}
-	
-	bsInfo->rx_buffs = count;
-	
-	p = tx_head;
-	count = 0;
-	
-	while ( p )
-	{
-		p->Data = ( char * ) p + sizeof ( ADI_ETHER_BUFFER ) + bsInfo->buff_overhead;
-		
-		p->ElementCount = bsInfo->tx_buff_datalen;
-		p->ElementWidth = 1;
-		p->CallbackParameter = p;
-		p->x = 0;
-		p->PayLoad = 0;
-		
-		count += 1;
-		p = p->pNext;
-	}
-	
-	bsInfo->tx_buffs = count;
-	
-	// give all the rx buffers to the Ethernet device driver
-	adi_ether_Read ( hDevice , ( ADI_ETHER_BUFFER * ) rx_head );
-	bsInfo->rcv_list = rx_head;
-	
-	// save the list of tx buffers until they are needed
-	bsInfo->xmt_queue.pQueueHead = tx_head;
-	bsInfo->xmt_queue.ElementCount = bsInfo->tx_buffs;
-
-	return 1;
-}
-
-static int InitBuff ( const unsigned int inMemSize, char *MemArea, ADI_ETHER_HANDLE hDevice, ETH_CFG_INFO *bsInfo )
-{
-	int i, overhead = 0;
-
-	int nw_ifce_buffer_length = 0;
-
-	unsigned int BUFF_AREA_START = 0;
-	unsigned int BUFF_AREA_LEN = 0;
-
-	int rx_len, tx_len;
-
-
-	short buffs;
-
-	BUFF_AREA_START = ( unsigned int ) ( ( ( unsigned int ) ( MemArea + 32 ) ) & ~31 );
-	BUFF_AREA_LEN   = ( unsigned int ) inMemSize;
-
-
-
-	// get driver specific overhead
-	adi_ether_GetBufferPrefix ( hDevice, ( void * ) &overhead );
-	bsInfo->buff_overhead  = overhead;
-
-	// Caluculate the total buffer space for rx/tx and for all n/w interfaces.
-	nw_ifce_buffer_length = 0;
-
-	rx_len = sizeof ( ADI_ETHER_BUFFER ) + bsInfo->buff_overhead + bsInfo->rx_buff_datalen;
-	tx_len = sizeof ( ADI_ETHER_BUFFER ) + bsInfo->buff_overhead + bsInfo->tx_buff_datalen;
-
-	/* make rx and tx lengths multiple of 32 byte cache lines */
-	rx_len = ( rx_len + 31 ) & ~31;
-	tx_len = ( tx_len + 31 ) & ~31;
-
-	bsInfo->rx_len_align = rx_len;
-	bsInfo->tx_len_align = tx_len;
-
-	nw_ifce_buffer_length  = bsInfo->rx_buffs * rx_len;
-	nw_ifce_buffer_length  += bsInfo->tx_buffs * tx_len;
-
-	if ( BUFF_AREA_LEN  < nw_ifce_buffer_length )
-	{
-		/*
-		buffs = ( BUFF_AREA_LEN ) / ( rx_len + tx_len );
-		if ( buffs < 1 )
-		{
-			DEBUG_STATEMENT ( "InitBuff: NO enough memory!\n\n" );
-			return -1;
-		}
-		*/
-
-		//先满足最小的buff需求
-		buffs = (bsInfo->rx_buffs < bsInfo->tx_buffs) ? bsInfo->rx_buffs:bsInfo->tx_buffs;
-
-		nw_ifce_buffer_length  = buffs * ( rx_len + tx_len );
-
-		if ( BUFF_AREA_LEN  < nw_ifce_buffer_length )
-		{
-			DEBUG_STATEMENT ( "InitBuff: NO enough memory!\n\n" );
-			return -1;
-		}
-
-		if( bsInfo->rx_buffs == buffs )
-		{
-			bsInfo->tx_buffs = buffs + (BUFF_AREA_LEN  - nw_ifce_buffer_length)/tx_len;
-		}
-		else if( bsInfo->tx_buffs == buffs )
-		{
-			bsInfo->rx_buffs = buffs + (BUFF_AREA_LEN  - nw_ifce_buffer_length)/rx_len;
-		}
-
-		nw_ifce_buffer_length  = bsInfo->rx_buffs * rx_len + bsInfo->tx_buffs * tx_len;
-
-	}
-
-	bsInfo->buff_area = ( char * ) ( BUFF_AREA_START  );
-	bsInfo->buff_area_size = nw_ifce_buffer_length;
-
-	//
-	return InitFrameBuff ( hDevice, bsInfo );
-}
-
-
-
-
-/* reverses the given mac_address */
-inline void reverse_mac ( char *ptr )
-{
-	int i, j;
-	char c;
-	
-	for ( i = 0, j = 5; i < 3; i++, j-- )
-	{
-		c = * ( ptr + i );
-		* ( ptr + i ) = * ( ptr + j );
-		* ( ptr + j ) = c;
-	}
-}
-
-
-
-/********************/
-void clear_queue ( ADI_EMAC_FRAME_Q *pQueue )
-{
-	pQueue->pQueueHead = NULL;
-	pQueue->pQueueTail = NULL;
-	pQueue->ElementCount = 0;
-}
-
-ADI_ETHER_BUFFER *pop_queue ( ADI_EMAC_FRAME_Q *pQueue )
-{
-	ADI_ETHER_BUFFER *p = NULL;
-	
-	ENTER_CRITICAL_REGION();
-	
-	
-	p = pQueue->pQueueHead;
-	
-	if ( !p )
-	{
-		EXIT_CRITICAL_REGION();
-		
-		return NULL;
-	}
-	
-	if ( pQueue->pQueueHead  == pQueue->pQueueTail  )
-	{
-		pQueue->pQueueTail = NULL;
-		pQueue->pQueueHead  = NULL;
-	}
-	
-	else
-	{
-		pQueue->pQueueHead = p->pNext;
-	}
-	
-	
-	pQueue->ElementCount--;
-	
-	p->pNext = NULL;
-	
-	EXIT_CRITICAL_REGION();
-	
-	return p;
-}
-
-int push_queue ( ADI_EMAC_FRAME_Q *pQueue, ADI_ETHER_BUFFER  *pBuffer )
-{
-
-	int32_t NumInputBuffers = 0;
-	ADI_ETHER_BUFFER *pTempBuffer = pBuffer, *pLastBuffer = NULL;
-	
-	if ( !pQueue || !pBuffer )
-	{
-		return 0;
-	}
-	
-	
-	/* typically the number of incoming buffers are small */
-	do
-	{
-		NumInputBuffers++;
-		pLastBuffer = pTempBuffer;
-		pTempBuffer = pTempBuffer->pNext;
-		
-	}
-	while ( pTempBuffer != NULL );
-	
-	ENTER_CRITICAL_REGION();
-	
-	/* Now insert and update the queue */
-	if ( ( pQueue->pQueueHead == NULL ) && ( pQueue->pQueueTail == NULL ) )
-		pQueue->pQueueHead = pBuffer;
-		
-	else
-		pQueue->pQueueTail->pNext = pBuffer;
-		
-	pQueue->pQueueTail    = pLastBuffer;
-	pQueue->ElementCount += NumInputBuffers;
-	
-	EXIT_CRITICAL_REGION();
-	
-	return NumInputBuffers;
-}

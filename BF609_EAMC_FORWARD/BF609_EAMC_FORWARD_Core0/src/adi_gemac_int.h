@@ -57,6 +57,8 @@
 #include <drivers/ethernet/adi_ether_misra.h>
 #include <string.h>
 
+#include "arith.h" //handle time
+
 /*! Statistical collection is enabled if ADI_ETHER_DEBUG macro is defined */
 #if defined(ADI_ETHER_DEBUG)
 #include <stdio.h>
@@ -68,6 +70,8 @@
 #define STATS_INC(x)                    /*!< disable statistic collection */
 #endif  /* ADI_ETHER_DEBUG */
 
+#define MAX_NETWORK_IF 2
+
 #define ADI_EMAC0_BASE_ADDRESS (0xFFC20000)     /*!< EMAC0 Base address for BF560x */
 #define ADI_EMAC1_BASE_ADDRESS (0xFFC22000)     /*!< EMAC1 Base address for BF560x */
 
@@ -76,6 +80,8 @@
 #define ADI_EMAC_MIN_DMEM_SZ       (4 *32)  /*!< minimum number of dma descriptors per channel */
 #define ADI_EMAC_DMAOWN            (1UL << 31) /*!< Set when DMA owns the descriptor */
 #define ADI_EMAC_NUM_MCAST_BINS    (64)   /*!< number of multicast bins supported by controller */
+
+
 
 #define MAC_LOOPCOUNT    1000000          /*!< counter used as timeout for MAC operations */
 
@@ -333,6 +339,20 @@ typedef struct ADI_EMAC_DEVICE
 	
 } ADI_EMAC_DEVICE;
 
+/* \struct ADI_ETHER_FRAME_BUFFER
+ *
+ * Structure map the ethernet MAC frame
+ */
+typedef struct ADI_ETHER_FRAME_BUFFER
+{
+	uint16_t     NoBytes;               /*!< Number of Bytes */
+	uint8_t      Dest[6];               /*!< destination MAC address  */
+	uint8_t      Srce[6];               /*!< source MAC address   */
+	uint8_t      LTfield[2];            /*!< length/type field    */
+	uint8_t      PktData[1];               /*!< payload bytes */
+
+} ADI_ETHER_FRAME_BUFFER;
+
 /*! EMAC Dma Descriptor status */
 typedef enum ADI_EMAC_DMADESC_STATUS
 {
@@ -455,7 +475,8 @@ static ADI_ETHER_RESULT activate_channel ( ADI_ETHER_HANDLE hDevice,
 static ADI_ETHER_RESULT insert_queue ( ADI_EMAC_FRAME_Q *pQueue,
 									   ADI_ETHER_BUFFER *pBuffer );
 
-static ADI_ETHER_RESULT bind_buf_with_desc ( ADI_ETHER_HANDLE hDevice, ADI_EMAC_CHANNEL *pChannel );
+static ADI_ETHER_RESULT bind_buf_with_desc ( ADI_ETHER_HANDLE hDevice,
+		ADI_EMAC_CHANNEL *pChannel );
 
 static ADI_ETHER_RESULT init_descriptor_list ( ADI_ETHER_HANDLE phDevice,
 		const uint8_t *pMemory,
@@ -467,9 +488,32 @@ static uint32_t emac_init ( ADI_ETHER_HANDLE *const phDevice );
 static void sleep ( uint32_t time_sec );
 
 ADI_ETHER_RESULT add_multicastmac_filter ( ADI_ETHER_HANDLE *const phDevice,
-		uint32_t GroupIpAddress,
-		bool bAddAddress );
+			uint32_t GroupIpAddress,
+			bool bAddAddress );
 
 static void flush_area ( void *start, uint32_t bytes );
 static void flushinv_area ( void *start, uint32_t bytes );
+
+/* ADI_EMAC_FRAME_Q manegment */
+void clear_queue ( ADI_EMAC_FRAME_Q *pQueue );
+ADI_ETHER_BUFFER*  pop_queue ( ADI_EMAC_FRAME_Q *pQueue );
+int                push_queue ( ADI_EMAC_FRAME_Q *pQueue,
+								ADI_ETHER_BUFFER  *pElem );
+
+
+/*  */
+void Init_PTPAuxin(void);
+void Enable_Time_Stamp_Auxin_Interrupt(void);
+void enable_rx ( ADI_ETHER_HANDLE phDevice );
+void enable_tx ( ADI_ETHER_HANDLE phDevice );
+void SetFlexiblePPSOutput( ADI_ETHER_HANDLE phDevice,
+									PPS_TYPE ePPSType,
+									TimeInternal tmStart,
+									unsigned int uPPSInterval,
+									unsigned int uPPSWidth);
+void ResetSysTime(ADI_ETHER_HANDLE phDevice);
+//enable emac tx,rx
+void enable_emac_tx_rx ( ADI_ETHER_HANDLE phDevice );
+void disable_emac_tx_rx ( ADI_ETHER_HANDLE phDevice );
+
 #endif /* _ADI_GEMAC_INT_H_ */

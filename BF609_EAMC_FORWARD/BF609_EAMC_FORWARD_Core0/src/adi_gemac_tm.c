@@ -52,6 +52,7 @@
 /** \defgroup GEMAC_Driver BF60x On-Chip EMAC Driver
  *  @{
  */
+#include "BF609_EMAC_Test_Core0.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -67,12 +68,14 @@
 
 #include "post_debug.h"
 
-#include "arith.h" //handle time
+//handle time
+#include "arith.h"
 #include "servo.h"
 
 #define NANO_SECOND_UNIT (1000000000)
 
 #define MAX_ADJ_TIME_IN_PI (100000)
+
 //E Z-KIT
 #define ADDEND_100M_25M_200M (0X80000000)
 //
@@ -80,7 +83,6 @@
 
 #define ADDEND_100M ADDEND_100M_16384K_163840K
 
-#define MAX_NETWORK_IF 2
 
 extern ADI_ETHER_HANDLE g_hDev[MAX_NETWORK_IF] ;
 extern int g_AuxiTMIsFirstUpdated ;
@@ -288,6 +290,18 @@ void enable_emac_tx_rx ( ADI_ETHER_HANDLE phDevice )
 
 	reg_data = pEmacRegs->EMAC_MACCFG;
 	reg_data  |=  ( BITM_EMAC_MACCFG_TE | BITM_EMAC_MACCFG_RE ); //
+
+	pEmacRegs->EMAC_MACCFG = reg_data;
+}
+
+void disable_emac_tx_rx ( ADI_ETHER_HANDLE phDevice )
+{
+	uint32_t reg_data;
+	ADI_EMAC_DEVICE    *const  pDev      = ( ADI_EMAC_DEVICE * ) phDevice ;
+	ADI_EMAC_REGISTERS *const  pEmacRegs = pDev->pEMAC_REGS;
+
+	reg_data = pEmacRegs->EMAC_MACCFG;
+	reg_data  &=  ~( BITM_EMAC_MACCFG_TE | BITM_EMAC_MACCFG_RE ); //
 
 	pEmacRegs->EMAC_MACCFG = reg_data;
 }
@@ -815,7 +829,6 @@ static void process_int ( ADI_EMAC_DEVICE *pDev, ADI_EMAC_CHANNEL *pChannel )
 					pTmp->RxTimeStamp.TimeStampLo = pCurDmaDesc->RxTimeStampLo;
 					pTmp->RxTimeStamp.TimeStampHi = pCurDmaDesc->RxTimeStampHi;
 					break;
-					
 			}
 			
 		}
@@ -1306,8 +1319,8 @@ void TimeStampStatusInterruptHandler ( 	ADI_ETHER_HANDLE phDevice, uint32_t tm_s
 		handle_auxiliary_tm_interrupt(phDevice, &g_AuxiTimeStamp[i-1]);
 
 		//PPS out is ERROR, it will be done in late day. by wjm@2014-9-4
-		startTime.seconds = g_AuxiTimeStamp[i-1].seconds+1;
-		SetFlexiblePPSOutput( phDevice, PULSE_SINGLE, startTime, 0x5F5E0FF, 0x2FAF07f);
+//		startTime.seconds = g_AuxiTimeStamp[i-1].seconds+1;
+//		SetFlexiblePPSOutput( phDevice, PULSE_SINGLE, startTime, 0x5F5E0FF, 0x2FAF07f);
 
 	}
 
@@ -2361,7 +2374,19 @@ static void  set_descriptor ( ADI_ETHER_HANDLE hDevice,
 	
 	if ( pChannel->Recv )
 	{
+#if 0
+		/*****added by wjm@2014-10-20, reserved 14 bytes for the forward
+		 *  header (FORWARD_ETHER_FRAME )*****/
+		pDmaDesc->StartAddr   = ( uint32_t ) ( ( uint8_t * ) pBindedBuf->Data + 2 + 14 );
+
+		if( hDevice == g_hDev[1]  )
+		{
+			pDmaDesc->StartAddr   = ( uint32_t ) ( ( uint8_t * ) pBindedBuf->Data + 2 );
+		}
+		/**********/
+#endif
 		pDmaDesc->StartAddr   = ( uint32_t ) ( ( uint8_t * ) pBindedBuf->Data + 2 );
+
 		pDmaDesc->ControlDesc |= ( 1UL << 14 );
 		
 		/* data cache is enabled flush and invalidate the cache for entire data area */
@@ -2773,6 +2798,89 @@ static void flushinv_area ( void *start, uint32_t bytes )
 	
 	/* System Sync */
 	ssync();
+}
+
+/********************/
+void clear_queue ( ADI_EMAC_FRAME_Q *pQueue )
+{
+	pQueue->pQueueHead = NULL;
+	pQueue->pQueueTail = NULL;
+	pQueue->ElementCount = 0;
+}
+
+
+ADI_ETHER_BUFFER *pop_queue ( ADI_EMAC_FRAME_Q *pQueue )
+{
+	ADI_ETHER_BUFFER *p = NULL;
+
+	ENTER_CRITICAL_REGION();
+
+
+	p = pQueue->pQueueHead;
+
+	if ( !p )
+	{
+		EXIT_CRITICAL_REGION();
+
+		return NULL;
+	}
+
+	if ( pQueue->pQueueHead  == pQueue->pQueueTail  )
+	{
+		pQueue->pQueueTail = NULL;
+		pQueue->pQueueHead  = NULL;
+	}
+
+	else
+	{
+		pQueue->pQueueHead = p->pNext;
+	}
+
+
+	pQueue->ElementCount--;
+
+	p->pNext = NULL;
+
+	EXIT_CRITICAL_REGION();
+
+	return p;
+}
+
+int push_queue ( ADI_EMAC_FRAME_Q *pQueue, ADI_ETHER_BUFFER  *pBuffer )
+{
+
+	int32_t NumInputBuffers = 0;
+	ADI_ETHER_BUFFER *pTempBuffer = pBuffer, *pLastBuffer = NULL;
+
+	if ( !pQueue || !pBuffer )
+	{
+		return 0;
+	}
+
+	/* typically the number of incoming buffers are small */
+	do
+	{
+		NumInputBuffers++;
+		pLastBuffer = pTempBuffer;
+		pTempBuffer = pTempBuffer->pNext;
+
+	}while ( pTempBuffer != NULL );
+
+	ENTER_CRITICAL_REGION();
+
+	/* Now insert and update the queue */
+	if ( ( pQueue->pQueueHead == NULL ) && ( pQueue->pQueueTail == NULL ) )
+		pQueue->pQueueHead = pBuffer;
+
+	else
+		pQueue->pQueueTail->pNext = pBuffer;
+
+	pQueue->pQueueTail    = pLastBuffer;
+	pQueue->ElementCount += NumInputBuffers;
+
+	EXIT_CRITICAL_REGION();
+
+	return NumInputBuffers;
 }
 
 #ifdef ADI_DEBUG
