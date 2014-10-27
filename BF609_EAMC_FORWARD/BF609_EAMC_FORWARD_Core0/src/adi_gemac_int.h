@@ -514,6 +514,7 @@ void SetFlexiblePPSOutput( ADI_ETHER_HANDLE phDevice,
 void ResetSysTime(ADI_ETHER_HANDLE phDevice);
 //enable emac tx,rx
 void enable_emac_tx_rx ( ADI_ETHER_HANDLE phDevice );
-void disable_emac_tx_rx ( ADI_ETHER_HANDLE phDevice );
+void stop_transfers ( ADI_ETHER_HANDLE phDevice );
+void restart_transfers ( ADI_ETHER_HANDLE phDevice );
 
 #endif /* _ADI_GEMAC_INT_H_ */

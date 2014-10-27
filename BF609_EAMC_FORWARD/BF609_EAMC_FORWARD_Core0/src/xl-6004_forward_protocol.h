@@ -33,19 +33,31 @@ extern volatile int g_ACKOK_XMT_Completed ;
 #define MODULE_CONFIG_GET  0X04
 
 /*
- * other macro
+ * Ethernet forward frame type macro define,
  */
+/*
+Typed Ethernet frames are frames with a length/type field that takes the type interpretation
+because it is greater than or equal to 0x600 (1536).
+*/
 #define BF609_FORWARD_SMV_TYPE_LO     0X06
-#define BF609_FORWARD_SMV_TYPE_HI        0XFE
+#define BF609_FORWARD_SMV_TYPE_HI_BASE        0XF0
+/* in order to distinguish the FORWARD SMV Messages from different BF609_BOARDs,
+ * the forward frame type is based on the BF609_BOARDs' MUAddr (see struct FORWARD_ETHER_FRAME
+ *  definition ), such as,
+ *  LTfield[0] = BF609_FORWARD_SMV_TYPE_LO;
+ *  LTfield[1] = BF609_FORWARD_SMV_TYPE_HI_BASE + MUAddr;
+ *  NOTES: the upper limit of forward frame type is 0x06ff
+ */
+
 #define BF609_UPDATE_VER_ACKOK_TYPE_LO     0X06
-#define BF609_UPDATE_VER_ACKOK_TYPE_HI        0XFD
+#define BF609_UPDATE_VER_ACKOK_TYPE_HI        0XeD
 #define BF609_UPDATE_VER_NAK_TYPE_LO     0X06
-#define BF609_UPDATE_VER_NAK_TYPE_HI        0XFC
+#define BF609_UPDATE_VER_NAK_TYPE_HI        0XeC
 
 #define BF609_UPDATE_VER_TYPE_LO     0X06
-#define BF609_UPDATE_VER_TYPE_HI        0XFB
+#define BF609_UPDATE_VER_TYPE_HI        0XeB
 #define BF609_READ_VER_TYPE_LO     0X06
-#define BF609_READ_VER_TYPE_HI        0XFA
+#define BF609_READ_VER_TYPE_HI        0XeA
 /*
  * the ERROR Code for Negative Acknowledge (NAK)
  */

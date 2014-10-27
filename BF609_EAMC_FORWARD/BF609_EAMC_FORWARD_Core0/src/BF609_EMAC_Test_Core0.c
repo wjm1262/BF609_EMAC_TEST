@@ -53,6 +53,8 @@ void External_PPS_Trigger_Callback ( ADI_GPIO_PIN_INTERRUPT   const ePinInt,
 
 /* ***　　global vars　　****************/
 
+extern FORWARD_ETHER_FRAME board_info;
+
 /*! size of the memory block to allocate to the stack.  */
 const unsigned g_contEthHeapSize[2]={1024*1024*12,1024*1024*12};
 

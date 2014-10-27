@@ -26,7 +26,7 @@ static BF609_COMM_ACK_CODE ProcessUpdateVersion(const CONTROL_FRAME *pCtrlDataBu
 
 /////////////////////////////////
 volatile int g_ACKOK_XMT_Completed = 0;
-static char VersionString[128] = "ver2.0.2@2014-10-23 PM 17:45, modify rx tx Buffer SIZE in file mem_manager.c.";
+static char VersionString[128] = "ver2.0.4@2014-10-25 AM 10:50";
 
 /*
  * 控制域
@@ -41,18 +41,17 @@ static char VersionString[128] = "ver2.0.2@2014-10-23 PM 17:45, modify rx tx Buf
  * */
 FORWARD_ETHER_FRAME board_info =
 {
-	{0},
+	0,
 	{0x06, 0x05, 0x04, 0x03, 0x02, 0x01},
-	{0},
+	0,
 	0x00,
 	BF609_FORWARD_SMV_PC,
-	{BF609_FORWARD_SMV_TYPE_LO, BF609_FORWARD_SMV_TYPE_HI},
+	{BF609_FORWARD_SMV_TYPE_LO, BF609_FORWARD_SMV_TYPE_HI_BASE},
 	{0}
 };
 
 /********************/
-
-
+//NOTES: if the SMVFrame more than 1500 bytes, then it is been cut off to 1500 bytes.
 ADI_ETHER_BUFFER *PackForwardSMVFrame ( uint32_t unNanoSecond, char *SMVFrame,
 		uint16_t SmvFrmLen, ETH_CFG_INFO *bsInfo )
 {
@@ -61,22 +60,15 @@ ADI_ETHER_BUFFER *PackForwardSMVFrame ( uint32_t unNanoSecond, char *SMVFrame,
 
 	char *head, *data, *Dst;
 
-	uint16_t  len;
+	uint16_t  PayLoadLen = SmvFrmLen;
 	uint16_t HeaderLen =14;
 
-	len = HeaderLen + SmvFrmLen;
 
-	if ( len > bsInfo->tx_buff_datalen )
+	if( PayLoadLen > MAX_ETHER_FRAME_LEN )
 	{
-		// frame too big for our buffers
-		DEBUG_PRINT ( "PackForwardSMVFrame: frame (Len:%d) more than our buffers (Len:%d)\n\n", len, bsInfo->tx_buff_datalen );
-		return NULL;
-	}
-
-	if( SmvFrmLen > MAX_ETHER_FRAME_LEN )
-	{
-		DEBUG_PRINT ( "PackForwardSMVFrame: frame (Len:%d) more than MAX_ETHER_FRAME_LEN (Len:%d)\n\n", SmvFrmLen, MAX_ETHER_FRAME_LEN );
-		return NULL;
+		//if the SMVFrame more than 1500 bytes, then it is been cut off to 1500 bytes.
+		//DEBUG_PRINT ( "PackForwardSMVFrame: frame (Len:%d) more than MAX_ETHER_FRAME_LEN (Len:%d), cut off to 1500bytes.\n\n", SmvFrmLen, MAX_ETHER_FRAME_LEN );
+		PayLoadLen = MAX_ETHER_FRAME_LEN;
 	}
 
 	// remove first free one from the list
@@ -91,13 +83,13 @@ ADI_ETHER_BUFFER *PackForwardSMVFrame ( uint32_t unNanoSecond, char *SMVFrame,
 	// copy data from pbuf(s) into our buffer
 	data = SMVFrame;
 	head = ( char * ) tx->Data;
-	PackForwardSMVFrmHeader ( head, unNanoSecond, SmvFrmLen);
+	PackForwardSMVFrmHeader ( head, unNanoSecond, PayLoadLen);
 
 	// the first two bytes reserved for length
 	Dst = ( char * ) tx->Data + 2 + HeaderLen;
-	memcpy ( Dst, data, SmvFrmLen );
+	memcpy ( Dst, data, PayLoadLen );
 
-	tx->ElementCount = len + 2; // total element count including 2 byte header
+	tx->ElementCount = HeaderLen + PayLoadLen + 2; // total element count including 2 byte header
 	tx->PayLoad =  0; // payload is part of the packet
 	tx->StatusWord = 0; // changes from 0 to the status info
 
@@ -123,7 +115,7 @@ void PackForwardSMVFrmHeader ( void *pForwardFrmHeader, uint32_t unNanoSecond,
 	pHeader->CtrlField 	= BF609_FORWARD_SMV_PC;//forward smv
 
 	pHeader->LTfield[0] = BF609_FORWARD_SMV_TYPE_LO;
-	pHeader->LTfield[1] = BF609_FORWARD_SMV_TYPE_HI;
+	pHeader->LTfield[1] = BF609_FORWARD_SMV_TYPE_HI_BASE + board_info.MUAddr;
 }
 
 ADI_ETHER_BUFFER *PackACKFrmOfUpdateVerion ( BF609_COMM_ACK_CODE AckCode,
@@ -158,7 +150,7 @@ ADI_ETHER_BUFFER *PackACKFrmOfUpdateVerion ( BF609_COMM_ACK_CODE AckCode,
 	pTxData->DestMAC[3] = board_info.DestMAC[3];
 	pTxData->DestMAC[4] = board_info.DestMAC[4];
 	pTxData->DestMAC[5] = board_info.DestMAC[5];
-	pTxData->MUAddr     = pRxData->MUAddr;
+	pTxData->MUAddr     = board_info.MUAddr;
 	pTxData->CtrlField  = pRxData->CtrlField;//BF609_CTR;//0x00
 	pTxData->LTfield[0] = BF609_UPDATE_VER_ACKOK_TYPE_LO;
 	pTxData->LTfield[1] = BF609_UPDATE_VER_ACKOK_TYPE_HI;
@@ -225,7 +217,7 @@ ADI_ETHER_BUFFER *PackACKFrmOfReadVersion ( void *pCtrlInfoFrmBuf, ETH_CFG_INFO 
 	pTxData->DestMAC[3] = board_info.DestMAC[3];
 	pTxData->DestMAC[4] = board_info.DestMAC[4];
 	pTxData->DestMAC[5] = board_info.DestMAC[5];
-	pTxData->MUAddr     = pRxData->MUAddr;
+	pTxData->MUAddr     = board_info.MUAddr;
 	pTxData->CtrlField  = pRxData->CtrlField;//BF609_CTR;//0x00
 
 	pTxData->LTfield[0] = BF609_READ_VER_TYPE_LO;
@@ -296,10 +288,6 @@ void HandleControlMessage(void *pBuf)
 						 asm("nop;");
 					 }
 
-					 adi_ether_Close ( g_hDev[0] );
-					 //stop EMAC0, EMAC1
-					//disable_emac_tx_rx(g_hDev[0]);
-
 					 adi_osal_EnterCriticalRegion();
 					 FlashErase(g_pLdrDataBuff, LDR_Len);
 					 adi_osal_ExitCriticalRegion();
@@ -307,12 +295,15 @@ void HandleControlMessage(void *pBuf)
 				 else if(ret != ACK_FRM_OK)
 				 {
 					 //NAK, send the ACK of control info
+					 restart_transfers(g_hDev[0]);
+
 					 pSend = PackACKFrmOfUpdateVerion ( ret, pBuf, &user_net_config_info[1] );
 					 EtherSend ( g_hDev[1], pSend );
 				 }
 			 }//VERSION_UPDATE
 			 else if( Ctr_Cmd == VERSION_GET)
 			 {
+				 DEBUG_STATEMENT ( " HandleControlMessage: read version!\n\n " );
 				 pSend = PackACKFrmOfReadVersion (  pBuf, &user_net_config_info[1] );
 				 EtherSend ( g_hDev[1], pSend );
 			 }
@@ -353,6 +344,13 @@ static BF609_COMM_ACK_CODE ProcessUpdateVersion(const CONTROL_FRAME *pCtrlDataBu
 	// get the length of ldr file, and malloc memory to save
 	*pLDR_Len = pLdrFrame->LDR_Len;
 	LDR_Len = pLdrFrame->LDR_Len;
+
+	if( LDR_Index == 0 )
+	{
+		 //stop EMAC0
+		stop_transfers( g_hDev[0] );
+		DEBUG_STATEMENT ( " ProcessUpdateVersion: stop EMAC0!\n\n " );
+	}
 
 	if( LDR_Index > LDR_Len )
 	{

@@ -281,30 +281,7 @@ void Enable_Time_Stamp_Auxin_Interrupt(void)
 	ssync();
 }
 
-//enable emac tx,rx
-void enable_emac_tx_rx ( ADI_ETHER_HANDLE phDevice )
-{
-	uint32_t reg_data;
-	ADI_EMAC_DEVICE    *const  pDev      = ( ADI_EMAC_DEVICE * ) phDevice ;
-	ADI_EMAC_REGISTERS *const  pEmacRegs = pDev->pEMAC_REGS;
 
-	reg_data = pEmacRegs->EMAC_MACCFG;
-	reg_data  |=  ( BITM_EMAC_MACCFG_TE | BITM_EMAC_MACCFG_RE ); //
-
-	pEmacRegs->EMAC_MACCFG = reg_data;
-}
-
-void disable_emac_tx_rx ( ADI_ETHER_HANDLE phDevice )
-{
-	uint32_t reg_data;
-	ADI_EMAC_DEVICE    *const  pDev      = ( ADI_EMAC_DEVICE * ) phDevice ;
-	ADI_EMAC_REGISTERS *const  pEmacRegs = pDev->pEMAC_REGS;
-
-	reg_data = pEmacRegs->EMAC_MACCFG;
-	reg_data  &=  ~( BITM_EMAC_MACCFG_TE | BITM_EMAC_MACCFG_RE ); //
-
-	pEmacRegs->EMAC_MACCFG = reg_data;
-}
 
 /* returns the pointer to gemac registers */
 #pragma inline
@@ -524,6 +501,71 @@ void unmask_gemac_ints ( ADI_ETHER_HANDLE phDevice )
 {
 	ADI_EMAC_REGISTERS *const  pEmacRegs = get_gemac_regptr ( phDevice );
 	pEmacRegs->EMAC_DMA_IEN = ADI_EMAC_AIS_NIS_INTERRUPTS;
+}
+
+
+//enable emac tx,rx
+void enable_emac_tx_rx ( ADI_ETHER_HANDLE phDevice )
+{
+	uint32_t reg_data;
+	ADI_EMAC_DEVICE    *const  pDev      = ( ADI_EMAC_DEVICE * ) phDevice ;
+	ADI_EMAC_REGISTERS *const  pEmacRegs = pDev->pEMAC_REGS;
+
+	reg_data = pEmacRegs->EMAC_MACCFG;
+	reg_data  |=  ( BITM_EMAC_MACCFG_TE | BITM_EMAC_MACCFG_RE ); //
+
+	pEmacRegs->EMAC_MACCFG = reg_data;
+}
+
+void stop_transfers ( ADI_ETHER_HANDLE phDevice )
+{
+	uint32_t reg_data;
+	ADI_EMAC_DEVICE    *const  pDev      = ( ADI_EMAC_DEVICE * ) phDevice ;
+	ADI_EMAC_REGISTERS *const  pEmacRegs = pDev->pEMAC_REGS;
+
+	/* stop transmit and receive */
+	ENTER_CRITICAL_REGION();
+	gemac_stop_tx ( phDevice );
+	EXIT_CRITICAL_REGION() ;
+
+	//Wait for any previous frame transmissions to complete
+	while(pEmacRegs->EMAC_DBG & BITM_EMAC_DBG_TXFIFONE)
+	{
+		asm("nop;");
+	}
+
+	ENTER_CRITICAL_REGION();
+	reg_data = pEmacRegs->EMAC_MACCFG;
+	reg_data  &=  ~( BITM_EMAC_MACCFG_TE | BITM_EMAC_MACCFG_RE ); //
+	pEmacRegs->EMAC_MACCFG = reg_data;
+	EXIT_CRITICAL_REGION() ;
+
+	//after ensuring that the data in the receive FIFO is transferred
+	//to the system memory by reading the EMAC_DBG register.
+	while( (pEmacRegs->EMAC_DBG & BITM_EMAC_DBG_RXFIFOST) != ENUM_EMAC_DBG_FIFO_EMPTY)
+	{
+		asm("nop;");
+	}
+
+	ENTER_CRITICAL_REGION();
+	gemac_stop_rx ( phDevice );
+	EXIT_CRITICAL_REGION();
+}
+//To re-start the operation, first start the DMA,
+//and then enable the MAC transmitter and receiver.
+void restart_transfers ( ADI_ETHER_HANDLE phDevice )
+{
+	uint32_t reg_data;
+	ADI_EMAC_DEVICE    *const  pDev      = ( ADI_EMAC_DEVICE * ) phDevice ;
+	ADI_EMAC_REGISTERS *const  pEmacRegs = pDev->pEMAC_REGS;
+
+	pEmacRegs->EMAC_DMA_OPMODE |= (BITM_EMAC_DMA_OPMODE_SR| BITM_EMAC_DMA_OPMODE_ST);
+
+	reg_data = pEmacRegs->EMAC_MACCFG;
+	reg_data  |=  ( BITM_EMAC_MACCFG_TE | BITM_EMAC_MACCFG_RE ); //
+
+	pEmacRegs->EMAC_MACCFG = reg_data;
+
 }
 
 /**
