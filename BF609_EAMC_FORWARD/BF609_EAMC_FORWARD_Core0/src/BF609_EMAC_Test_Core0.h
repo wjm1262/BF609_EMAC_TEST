@@ -32,7 +32,7 @@
  * ADSP-BF60x family configuration
  */
 #if defined( __ADSPBF60x__)
-
+#include <adi_osal.h>
 #include <drivers/ethernet/adi_ether_gemac.h>
 #include <services/int/adi_int.h>
 #include <services/int/adi_sec.h>
@@ -65,6 +65,11 @@ extern "C"  {
 #endif
 
 
+
+/*! Enters critical region */
+#define ENTER_CRITICAL_REGION()  (adi_osal_EnterCriticalRegion())
+/*! Exit critical region */
+#define EXIT_CRITICAL_REGION()   (adi_osal_ExitCriticalRegion())
 
 
 /*********************** user-defined Functions  ******************************************/

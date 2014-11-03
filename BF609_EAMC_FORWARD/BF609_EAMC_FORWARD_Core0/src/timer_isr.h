@@ -22,7 +22,7 @@
 /*******************************************************************
 *  function prototypes
 *******************************************************************/
-void Init_Timers(void);
+
 void Init_Timer_Interrupts(void);
 void Delay(const unsigned long ulMs);
 unsigned int SetTimeout(const unsigned long ulTicks);

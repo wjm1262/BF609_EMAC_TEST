@@ -1,6 +1,6 @@
 /*
  **
- ** pinmux_config.c source file generated on 十月 16, 2014 at 17:21:17.	
+ ** pinmux_config.c source file generated on 十月 31, 2014 at 13:47:38.	
  **
  ** Copyright (C) 2000-2014 Analog Devices Inc., All Rights Reserved.
  **
@@ -14,11 +14,12 @@
  ** ETH0 (MDC, MDIO, PHYINT, TXD0, TXD1, TXEN, REFCLK, RXD0, RXD1, CRS, RXERR, PTPPPS)
  ** ETH (PTPAUXIN)
  ** ETH1 (MDC, MDIO, PHYINT, TXD0, TXD1, TXEN, REFCLK, RXD0, RXD1, CRS, RXERR, PTPPPS)
+ ** TIMER0 (TMR1)
  **
  ** GPIO (unavailable)
  ** ------------------
  ** PB13, PB14, PB15, PC00, PC01, PC02, PC03, PC04, PC05, PC06, PC07, PC09, PC11,
- ** PD06, PE10, PE11, PE12, PE13, PE14, PE15, PG00, PG02, PG03, PG05, PG06
+ ** PD06, PE10, PE11, PE12, PE13, PE14, PE15, PG00, PG02, PG03, PG04, PG05, PG06
  */
 
 #include <sys/platform.h>
@@ -49,6 +50,7 @@
 #define ETH1_CRS_PORTE_MUX  ((uint32_t) ((uint32_t) 0<<26))
 #define ETH1_RXERR_PORTE_MUX  ((uint32_t) ((uint32_t) 0<<28))
 #define ETH1_PTPPPS_PORTC_MUX  ((uint32_t) ((uint32_t) 0<<18))
+#define TIMER0_TMR1_PORTG_MUX  ((uint16_t) ((uint16_t) 1<<8))
 
 #define ETH0_MDC_PORTC_FER  ((uint16_t) ((uint16_t) 1<<6))
 #define ETH0_MDIO_PORTC_FER  ((uint16_t) ((uint16_t) 1<<7))
@@ -75,6 +77,7 @@
 #define ETH1_CRS_PORTE_FER  ((uint32_t) ((uint32_t) 1<<13))
 #define ETH1_RXERR_PORTE_FER  ((uint32_t) ((uint32_t) 1<<14))
 #define ETH1_PTPPPS_PORTC_FER  ((uint32_t) ((uint32_t) 1<<9))
+#define TIMER0_TMR1_PORTG_FER  ((uint16_t) ((uint16_t) 1<<4))
 
 int32_t adi_initpinmux(void);
 
@@ -94,7 +97,8 @@ int32_t adi_initpinmux(void) {
      | ETH1_PHYINT_PORTE_MUX | ETH1_RXD1_PORTE_MUX | ETH1_CRS_PORTE_MUX
      | ETH1_RXERR_PORTE_MUX;
     *pREG_PORTG_MUX = ETH1_TXD0_PORTG_MUX | ETH1_TXD1_PORTG_MUX
-     | ETH1_TXEN_PORTG_MUX | ETH1_REFCLK_PORTG_MUX | ETH1_RXD0_PORTG_MUX;
+     | ETH1_TXEN_PORTG_MUX | ETH1_REFCLK_PORTG_MUX | ETH1_RXD0_PORTG_MUX
+     | TIMER0_TMR1_PORTG_MUX;
 
     /* PORTx_FER registers */
     *pREG_PORTB_FER = ETH0_TXEN_PORTB_FER | ETH0_REFCLK_PORTB_FER
@@ -108,7 +112,8 @@ int32_t adi_initpinmux(void) {
      | ETH1_PHYINT_PORTE_FER | ETH1_RXD1_PORTE_FER | ETH1_CRS_PORTE_FER
      | ETH1_RXERR_PORTE_FER;
     *pREG_PORTG_FER = ETH1_TXD0_PORTG_FER | ETH1_TXD1_PORTG_FER
-     | ETH1_TXEN_PORTG_FER | ETH1_REFCLK_PORTG_FER | ETH1_RXD0_PORTG_FER;
+     | ETH1_TXEN_PORTG_FER | ETH1_REFCLK_PORTG_FER | ETH1_RXD0_PORTG_FER
+     | TIMER0_TMR1_PORTG_FER;
     return 0;
 }
 

@@ -25,16 +25,14 @@
 
 #include "xl-6004_forward_protocol.h"
 
+#include "core_timer.h"
+#include "timer_isr.h"
+
 #define EMAC0_NUM_RECV_DESC    (1200)  /*! Number of receive DMA descriptors  */
 #define EMAC0_NUM_XMIT_DESC    (10)  /*! Number of transmit DMA descriptors */
 #define EMAC1_NUM_RECV_DESC    (100)  /*! Number of receive DMA descriptors  */
 #define EMAC1_NUM_XMIT_DESC    (1200)  /*! Number of transmit DMA descriptors */
 
-
-/*! Enters critical region */
-#define ENTER_CRITICAL_REGION()  (adi_osal_EnterCriticalRegion())
-/*! Exit critical region */
-#define EXIT_CRITICAL_REGION()   (adi_osal_ExitCriticalRegion())
 
 //
 void HandleLoop(void);
@@ -88,6 +86,48 @@ ADI_ETHER_MEM memtable[MAX_NETWORK_IF] =
 	}
 };
 
+/* init the LED service
+ * used for indicating the update process
+  */
+static void GPIO_Init(void)
+{
+	ADI_GPIO_RESULT result;
+	static uint8_t gpioMemory[32];
+	uint32_t gpioMaxCallbacks;
+
+	result = adi_gpio_Init( (void*)gpioMemory,	32,	&gpioMaxCallbacks);
+	if (result != ADI_GPIO_SUCCESS)
+	{
+		DEBUG_PRINT("%s failed\n\n", result);
+	}
+
+	/* set GPIO output LED 1 */
+	result = adi_gpio_SetDirection(	ADI_GPIO_PORT_G, ADI_GPIO_PIN_13, ADI_GPIO_DIRECTION_OUTPUT);
+	if (result != ADI_GPIO_SUCCESS)
+	{
+		DEBUG_PRINT("%s failed\n\n", result);
+	}
+
+	/* LED1 */
+	result = adi_gpio_Set(ADI_GPIO_PORT_G, ADI_GPIO_PIN_13);
+	if (result != ADI_GPIO_SUCCESS)
+	{
+		DEBUG_PRINT("%s failed\n\n", result);
+	}
+
+	/* set GPIO output WDI */
+	result = adi_gpio_SetDirection(	ADI_GPIO_PORT_C, ADI_GPIO_PIN_15, ADI_GPIO_DIRECTION_OUTPUT);
+	if (result != ADI_GPIO_SUCCESS)
+	{
+		DEBUG_PRINT("%s failed\n\n", result);
+	}
+	/* LED1 */
+	result = adi_gpio_Set(ADI_GPIO_PORT_C, ADI_GPIO_PIN_15);
+	if (result != ADI_GPIO_SUCCESS)
+	{
+		DEBUG_PRINT("%s failed\n\n", result);
+	}
+}
 
 void main ( void )
 {
@@ -131,11 +171,21 @@ void main ( void )
     	fclose(pDebugFile);
     	return;
     }
+
 #elif defined(__DEBUG_UART__)
+
     Init_UART();
+
 #endif
 
+    GPIO_Init();
+
     Init_PTPAuxin();
+
+    CoreTimerInit();
+
+    Init_Timer_Interrupts();
+
 
 	/* configures the switches */
 #if BF609_EZ_BRD
@@ -152,6 +202,9 @@ void main ( void )
 	nEtherDevUsed = 1;
 #endif
 
+	snprintf(VersionString + 15, 100, "Board ID:%d, Built on %s, at %s ", board_info.MUAddr, __DATE__, __TIME__);
+
+	DEBUG_PRINT ( " %s \n\n" , VersionString);
 	DEBUG_STATEMENT ( " init EMAC\n\n" );
 
 	for ( i = 0; i < nEtherDevUsed; i++ )
@@ -180,7 +233,7 @@ void main ( void )
 		nRet = InitBuff ( g_contEthHeapSize[i],
 				ether_stack_block, hEthernet,
 				&user_net_config_info[i] );
-		if( nRet<0 )
+		if( nRet < 0 )
 		{
 			DEBUG_STATEMENT ( " InitBuff: failed to enable Init Buffs\n\n" );
 			return ;

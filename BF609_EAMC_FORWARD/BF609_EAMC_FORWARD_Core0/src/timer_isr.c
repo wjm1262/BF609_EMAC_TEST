@@ -20,6 +20,7 @@
 #include "post_debug.h"
 #include "Timer_ISR.h"
 #include <services/int/adi_sec.h>
+#include <services/gpio/adi_gpio.h>
 
 #if defined(__DEBUG_FILE__)
 #include <string.h>
@@ -44,9 +45,9 @@ uint8_t TimerMemory[ADI_TMR_MEMORY];
 static void TimerHandler(void *pCBParam, uint32_t Event, void *pArg);
 
 #define TEST_TIMER_NUM      1
-#define TIMER_WIDTH         10000
-#define TIMER_DELAY         1000
-#define TIMER_PERIOD        20000
+#define TIMER_WIDTH         (81920000)
+#define TIMER_DELAY          (40960000)
+#define TIMER_PERIOD        (163840000)
 
 /* Timer handle */
 static ADI_TMR_HANDLE ghTimer = 0;
@@ -76,20 +77,7 @@ bool EnableGPTimer(bool bEnable)
 	}
 }
 
-/*******************************************************************
-*   Function:    Init_Timers
-*   Description: This function initializes Timer0 for PWM mode.
-*******************************************************************/
-void Init_Timers(void)
-{
-	/* active state, auto reload, generate no interrupt */
-	*pTCNTL = BITM_TCNTL_PWR | BITM_TCNTL_AUTORLD | BITM_TCNTL_INT ;
-	*pTPERIOD = TIMEOUT_PERIOD;
-	*pTSCALE = TIMEOUT_PERIOD/2;
 
-	/* enable the timer */
-	*pTCNTL |= BITM_TCNTL_EN;
-}
 
 /*******************************************************************
 *   Function:    Init_Timer_Interrupts
@@ -265,6 +253,8 @@ static void TimerHandler(void *pCBParam, uint32_t Event, void *pArg)
 	unsigned int n;
 	
 	g_ulTickCount++;
+
+	adi_gpio_Toggle(ADI_GPIO_PORT_C, ADI_GPIO_PIN_15);
 
 	/* decrement each counter if it is non-zero */
 	for( n = 0; n < MAX_NUM_COUNTDOWN_TIMERS; n++ )

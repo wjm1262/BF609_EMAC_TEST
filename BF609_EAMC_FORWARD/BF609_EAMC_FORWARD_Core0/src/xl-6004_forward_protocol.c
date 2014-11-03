@@ -26,7 +26,7 @@ static BF609_COMM_ACK_CODE ProcessUpdateVersion(const CONTROL_FRAME *pCtrlDataBu
 
 /////////////////////////////////
 volatile int g_ACKOK_XMT_Completed = 0;
-static char VersionString[128] = "ver2.0.4@2014-10-25 AM 10:50";
+char VersionString[128] = "Version 3.0.2. ";
 
 /*
  * 控制域
@@ -44,7 +44,7 @@ FORWARD_ETHER_FRAME board_info =
 	0,
 	{0x06, 0x05, 0x04, 0x03, 0x02, 0x01},
 	0,
-	0x00,
+	0x02,
 	BF609_FORWARD_SMV_PC,
 	{BF609_FORWARD_SMV_TYPE_LO, BF609_FORWARD_SMV_TYPE_HI_BASE},
 	{0}
@@ -87,6 +87,7 @@ ADI_ETHER_BUFFER *PackForwardSMVFrame ( uint32_t unNanoSecond, char *SMVFrame,
 
 	// the first two bytes reserved for length
 	Dst = ( char * ) tx->Data + 2 + HeaderLen;
+
 	memcpy ( Dst, data, PayLoadLen );
 
 	tx->ElementCount = HeaderLen + PayLoadLen + 2; // total element count including 2 byte header
@@ -288,9 +289,9 @@ void HandleControlMessage(void *pBuf)
 						 asm("nop;");
 					 }
 
-					 adi_osal_EnterCriticalRegion();
+					 //adi_osal_EnterCriticalRegion();
 					 FlashErase(g_pLdrDataBuff, LDR_Len);
-					 adi_osal_ExitCriticalRegion();
+					 //adi_osal_ExitCriticalRegion();
 				 }
 				 else if(ret != ACK_FRM_OK)
 				 {

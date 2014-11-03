@@ -76,14 +76,33 @@
 
 #define MAX_ADJ_TIME_IN_PI (100000)
 
+
+
 //E Z-KIT
 #define ADDEND_100M_25M_200M (0X80000000)
 //
 #define ADDEND_100M_16384K_163840K (0X9C400000)
 
 #define ADDEND_100M ADDEND_100M_16384K_163840K
+#define PPS_WIDTH_100M  (0x2FAF080)
+#define PPS_INTERVAL_100M (0x5F5E100)
+
+#define ADDEND_50M (ADDEND_100M *0.5)
+#define PPS_WIDTH_50M (PPS_WIDTH_100M*0.5)
+#define PPS_INTERVAL_50M (PPS_INTERVAL_100M*0.5)
+
+// 系统晶振频率
+#define SYS_CLKIN (1684000)
+
+//PTP模块输出频率
+#define PTP_REF_CLK (50000000)
+
+#define ADDEND_VAL ADDEND_50M
+#define PPS_WIDTH_VAL PPS_WIDTH_50M
+#define PPS_INTERVAL_VAL PPS_INTERVAL_50M
 
 
+//external variables
 extern ADI_ETHER_HANDLE g_hDev[MAX_NETWORK_IF] ;
 extern int g_AuxiTMIsFirstUpdated ;
 extern PIservo PI;
@@ -97,10 +116,6 @@ TimeInternal g_EndTime ={0,0};
 unsigned int g_CurAuxiFIFOCounter = 0;
 TimeInternal g_AuxiTimeStamp[4]={0};
 
-/*! Enters critical region */
-#define ENTER_CRITICAL_REGION()  (adi_osal_EnterCriticalRegion())
-/*! Exit critical region */
-#define EXIT_CRITICAL_REGION()   (adi_osal_ExitCriticalRegion())
 
 /*!  EMAC0 and EMAC1 Driver instances */
 //capture the rx time stamp and enable the auxiliary time stamp.
@@ -126,11 +141,10 @@ static TimeInternal s_PreTmInternal ={-1,0};//
 static int s_MaxAdjTimeInPI = MAX_ADJ_TIME_IN_PI;
 static int s_MaxAdjTimeCount = 0;
 
-void InitSysTime(ADI_EMAC_REGISTERS *pEmacRegs)
+
+void InitSysTime(ADI_EMAC_REGISTERS *pEmacRegs )
 {
 	//(a)
-//	*pREG_EMAC0_TM_SECUPDT = 0; //
-//	*pREG_EMAC0_TM_NSECUPDT = 0;//
 	pEmacRegs->EMAC_TM_SECUPDT = 0;
 	pEmacRegs->EMAC_TM_NSECUPDT = 0;
 	//(b)
@@ -138,17 +152,15 @@ void InitSysTime(ADI_EMAC_REGISTERS *pEmacRegs)
 	pEmacRegs->EMAC_TM_CTL |= BITM_EMAC_TM_CTL_TSINIT;//ENUM_EMAC_TM_CTL_EN_TS_INIT;//system time init
 	//(c)
 	//*pREG_EMAC0_TM_CTL |= ENUM_EMAC_TM_CTL_RO_SUBSEC_RES;
-	//*pREG_EMAC0_TM_CTL |= ENUM_EMAC_TM_CTL_RO_NANO_RES;
 	pEmacRegs->EMAC_TM_CTL |= ENUM_EMAC_TM_CTL_RO_NANO_RES;
 
 	//When EMAC_TM_CTL.TSCTRLSSR is clear, the EMAC_TM_NSEC register has a resolution of ~0.465ns.
 	//Binary rollover mode, When reset, the roll over value of EMAC_TM_NSEC register is 0x7FFF_FFFF.
 
-	//*pREG_EMAC0_TM_ADDEND = ADDEND_100M ; // PTP Refer CLK = 100M
-	pEmacRegs->EMAC_TM_ADDEND = ADDEND_100M ; // PTP Refer CLK = 100M
+	pEmacRegs->EMAC_TM_ADDEND = ADDEND_VAL ;
 
 	//*pREG_EMAC0_TM_SUBSEC = 0xA;
-	pEmacRegs->EMAC_TM_SUBSEC = 0xA;
+	pEmacRegs->EMAC_TM_SUBSEC = NANO_SECOND_UNIT/PTP_REF_CLK; //0x14;//20ns, PTP Refer CLK = 50M
 
 	pEmacRegs->EMAC_TM_CTL |= BITM_EMAC_TM_CTL_TSADDREG |ENUM_EMAC_TM_CTL_EN_FINE_UPDT;
 	asm ( "SSYNC;" );
@@ -198,15 +210,11 @@ void SetFlexiblePPSOutput( ADI_ETHER_HANDLE phDevice, PPS_TYPE ePPSType, TimeInt
 	*/
 	if ( phDevice == g_hDev[0] )
 	{
-//			*pREG_EMAC0_TM_PPSINTVL = 0x5F5E100;//100M //0x2FAF080; //50M
-//			*pREG_EMAC0_TM_PPSWIDTH = 0x2FAF080;//0x2625A0;// 50ms
 		*pREG_EMAC0_TM_PPSINTVL = uPPSInterval;//100M //0x2FAF080; //50M
 		*pREG_EMAC0_TM_PPSWIDTH = uPPSWidth;//0x2625A0;// 50ms
 	}
 	else
 	{
-//		//	*pREG_EMAC1_TM_PPSINTVL = 0x5F5E100;//100M //0x2FAF080; //50M
-//			*pREG_EMAC1_TM_PPSWIDTH = 0x2FAF080;//0x2625A0;// 50ms
 		*pREG_EMAC1_TM_PPSINTVL = uPPSInterval;//100M //0x2FAF080; //50M
 		*pREG_EMAC1_TM_PPSWIDTH = uPPSWidth;//0x2625A0;// 50ms
 	}
@@ -1107,6 +1115,7 @@ static void handle_auxiliary_tm_interrupt(	ADI_ETHER_HANDLE phDevice, const Time
 	double deltaNanoSec = 0;
 	unsigned int addend = 0;
 	int adjAddend = 0;
+	TimeInternal startTime ={10,0};
 
 	/* the First time for external trigger PPS arrived,
 	 * reInit the system time and output system PPS
@@ -1125,7 +1134,11 @@ static void handle_auxiliary_tm_interrupt(	ADI_ETHER_HANDLE phDevice, const Time
 
 		DEBUG_PRINT("aux:< %10d.%-9d >  sys:(reset)\n\n",pAuxiTimeStamp->seconds,  pAuxiTimeStamp->nanoseconds );
 
-		// 璁剧疆绗竴娆℃洿鏂版爣蹇�
+		//startTime.seconds = g_AuxiTimeStamp[i-1].seconds+1;
+		//startTime.nanoseconds = g_AuxiTimeStamp[i-1].nanoseconds;
+		SetFlexiblePPSOutput( phDevice, PULSE_TRAIN, startTime, PPS_INTERVAL_VAL-1, PPS_WIDTH_VAL-1);
+
+		// 第一次更新标志
 		g_AuxiTMIsFirstUpdated = 0;
 
 	}
@@ -1144,8 +1157,12 @@ static void handle_auxiliary_tm_interrupt(	ADI_ETHER_HANDLE phDevice, const Time
 
 			//Fine Correction
 			deltaNanoSec = runPIservo ( &PI, tmInternal.nanoseconds );
-			adjAddend = calcAdjAddend ( ADDEND_100M, deltaNanoSec, PI.dt );
-			addend = ADDEND_100M + adjAddend;
+
+			//
+			adjAddend = calcAdjAddend ( ADDEND_VAL, deltaNanoSec, PI.dt );//
+
+			//
+			addend = ADDEND_VAL + adjAddend;
 
 			pEmacRegs->EMAC_TM_ADDEND =  addend;
 			pEmacRegs->EMAC_TM_CTL |= BITM_EMAC_TM_CTL_TSADDREG |ENUM_EMAC_TM_CTL_EN_FINE_UPDT;
@@ -1168,8 +1185,8 @@ static void handle_auxiliary_tm_interrupt(	ADI_ETHER_HANDLE phDevice, const Time
 		}//	if( 0 == tmInternal.seconds  ...)
 
 
-		//add by wjm@2014-9-4
-
+		//add by wjm@2014-9-4 to verify whether have one more tm in the TM FIFO.
+#if 0
 		if(g_CurAuxiFIFOCounter > 1)
 		{
 			for( int i = 0; i < g_CurAuxiFIFOCounter; i++)
@@ -1178,125 +1195,14 @@ static void handle_auxiliary_tm_interrupt(	ADI_ETHER_HANDLE phDevice, const Time
 			}
 
 		}
-
-		DEBUG_PRINT("aux:< %10d.%-9d > int:(%10d %-9d) adj: %d \n\n", pAuxiTimeStamp->seconds, pAuxiTimeStamp->nanoseconds, tmInternal.seconds, tmInternal.nanoseconds, adjAddend);
-	}//if(g_AuxiTMIsFirstUpdated == 1)
-
-
-}
-
-static void handle_auxiliary_tm_interrupt2(	ADI_ETHER_HANDLE phDevice, const TimeInternal *pAuxiTimeStamp )
-{
-
-	ADI_EMAC_DEVICE    *const  pDev      = ( ADI_EMAC_DEVICE * ) phDevice;
-	ADI_EMAC_REGISTERS *const pEmacRegs = ( ( ADI_EMAC_DEVICE * ) phDevice )->pEMAC_REGS;
-
-	TimeInternal tmInternal = {0,0};
-	double deltaNanoSec = 0;
-	unsigned int addend = 0;
-	int adjAddend = 0;
-
-	TimeInternal startTime ={1,0};
-	int diltaTm = 0;
-	int tmpTM1 = 0;
-	int tmpTM2 = 0;
-
-	/* the First time for external trigger PPS arrived,
-	 * reInit the system time and output system PPS
-	*/
-
-	if(g_AuxiTMIsFirstUpdated == 1)
-	{
-		/* reset the system time should be done before the SetFlexiblePPSOutput,
-		 * for the current time may exceed the startTime,
-		 * then cause a Time Stamp Target Time Programming Error.
-		 * And this situation is testified in our TESTS.
-			by wjm@2014-8-16 AM9:30
-		 * */
-
-		//reset the system time
-		ResetSysTime( phDevice );
-
-		DEBUG_PRINT("aux:< %10d.%-9d > std:(%10d.%-9d), sys:(reset)\n\n",pAuxiTimeStamp->seconds,  pAuxiTimeStamp->nanoseconds, s_StdPPSTime.seconds, s_StdPPSTime.nanoseconds );
-		// set std time
-		s_StdPPSTime.seconds = 0;
-		s_StdPPSTime.nanoseconds = 0;
-
-		// 璁剧疆绗竴娆℃洿鏂版爣蹇�
-		g_AuxiTMIsFirstUpdated = 0;
-
-	}
-	else
-	{
-
-		s_StdPPSTime.seconds++;
-		subTime ( &tmInternal, pAuxiTimeStamp, &s_StdPPSTime );
-		diltaTm = abs( tmInternal.nanoseconds - s_PreTmInternal.nanoseconds);
-
-//		startTime.seconds = s_StdPPSTime.seconds+1;
-//		SetFlexiblePPSOutput( phDevice, PULSE_SINGLE, startTime, 0x5F5E0FF, 0x2FAF07f);
-
-		if( ( 0 == tmInternal.seconds) && ( (tmInternal.nanoseconds <= MAX_ADJ_TIME_IN_PI) && (tmInternal.nanoseconds >= -MAX_ADJ_TIME_IN_PI) ) )
-		{
-
-			//Fine Correction
-			deltaNanoSec = runPIservo ( &PI, tmInternal.nanoseconds );
-			adjAddend = calcAdjAddend ( ADDEND_100M, deltaNanoSec, PI.dt );
-			addend = ADDEND_100M + adjAddend;
-
-			pEmacRegs->EMAC_TM_ADDEND =  addend;
-			pEmacRegs->EMAC_TM_CTL |= BITM_EMAC_TM_CTL_TSADDREG |ENUM_EMAC_TM_CTL_EN_FINE_UPDT;
-
-		}
-		else if(  ( 1 == tmInternal.seconds) &&  (diltaTm <= 100 ) )
-		{
-			//add by wjm@2014-9-4
-			// 澶栭儴PPS 鍙兘涓㈠け1
-			s_StdPPSTime.seconds++;
-		}
-		else
-		{
-
-			//reset the system time
-			ResetSysTime( phDevice );
-
-			// set std time
-			s_StdPPSTime.seconds = 0;
-			s_StdPPSTime.nanoseconds = 0;
-
-//			while( pEmacRegs->EMAC_TM_PPSCTL & 0xF != 0)
-//			{
-//				;
-//			}
-//			pEmacRegs->EMAC_TM_PPSCTL |= 0x5;//the STOP pulse train immediately command (EMAC_TM_PPSCTL.PPSCTL = 0101)
-
-		}//	if( 0 == tmInternal.seconds  ...)
-
-#ifdef _DEBUG
-
-		g_EndTime.nanoseconds = pEmacRegs->EMAC_TM_NSEC;
-		g_EndTime.seconds = pEmacRegs->EMAC_TM_SEC;
 #endif
-		//DEBUG_PRINT(" (%10d.%-9d  to %10d.%-9d)\t %10d\t %9d\t %d\n\n", g_StartTime.seconds, g_StartTime.nanoseconds, g_EndTime.seconds, g_EndTime.nanoseconds,tmInternal.seconds, tmInternal.nanoseconds, addend);
-
-		//add by wjm@2014-9-4
-		s_PreTmInternal.nanoseconds =  tmInternal.nanoseconds;
-
-
-		if(g_CurAuxiFIFOCounter > 1)
-		{
-			for( int i = 0; i < g_CurAuxiFIFOCounter; i++)
-			{
-				DEBUG_PRINT( "i: %d \t < %10d.%-9d >\n\n ", i, g_AuxiTimeStamp[i].seconds,  g_AuxiTimeStamp[i].nanoseconds);
-			}
-
-		}
-
 		DEBUG_PRINT("aux:< %10d.%-9d > int:(%10d %-9d) adj: %d \n\n", pAuxiTimeStamp->seconds, pAuxiTimeStamp->nanoseconds, tmInternal.seconds, tmInternal.nanoseconds, adjAddend);
 	}//if(g_AuxiTMIsFirstUpdated == 1)
 
 
 }
+
+
 
 void TimeStampStatusInterruptHandler ( 	ADI_ETHER_HANDLE phDevice, uint32_t tm_status )
 {
@@ -1361,8 +1267,10 @@ void TimeStampStatusInterruptHandler ( 	ADI_ETHER_HANDLE phDevice, uint32_t tm_s
 		handle_auxiliary_tm_interrupt(phDevice, &g_AuxiTimeStamp[i-1]);
 
 		//PPS out is ERROR, it will be done in late day. by wjm@2014-9-4
-//		startTime.seconds = g_AuxiTimeStamp[i-1].seconds+1;
-//		SetFlexiblePPSOutput( phDevice, PULSE_SINGLE, startTime, 0x5F5E0FF, 0x2FAF07f);
+		//startTime.seconds = g_AuxiTimeStamp[i-1].seconds+1;
+		//startTime.nanoseconds = g_AuxiTimeStamp[i-1].nanoseconds;
+
+		//SetFlexiblePPSOutput( phDevice, PULSE_SINGLE, startTime, 0x5F5E0FF, 0x2FAF07f);
 
 	}
 
@@ -1992,7 +1900,9 @@ ADI_ETHER_RESULT adi_ether_GemacEnableMAC ( ADI_ETHER_HANDLE phDevice )
 	ADI_EMAC_REGISTERS *const  pEmacRegs = ( ( ADI_EMAC_DEVICE * ) phDevice )->pEMAC_REGS;
 	uint32_t            Status;
 	ADI_EMAC_DMADESC    *pDmaDesc;
-	TimeInternal startTime = {0,0};
+
+
+
 #if defined(ADI_DEBUG)
 	
 	/* If device is already enabled then we throw an error in debug build */
@@ -2104,8 +2014,8 @@ ADI_ETHER_RESULT adi_ether_GemacEnableMAC ( ADI_ETHER_HANDLE phDevice )
 		pEmacRegs->EMAC_TM_CTL |= BITM_EMAC_TM_CTL_TSENALL; //ENUM_EMAC_TM_CTL_E_TSALL_FRAMES;
 		
 		//a.4 select clk source
-		*pREG_PADS0_EMAC_PTP_CLKSEL = 0x5;//EMAC0:SCLK0(0x1) EMAC1:SCLK0(0x4) ,RMII(0x0)50M
-		
+		*pREG_PADS0_EMAC_PTP_CLKSEL = 0x5;//SELECT SCLK0/SCLK1, EMAC0:SCLK0(0x1) AND EMAC1:SCLK0(0x4) ，SCLK(0X01)
+
 		//c.1 Set the EMAC_IMSK.TS bit to enable PTP interrupts. THIS is done after ENABLE the EMAC.
 //
 //		*pREG_EMAC0_IMSK  =  TM_AUXI_INT_EN;//BITM_EMAC_IMSK_TS;

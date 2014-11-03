@@ -150,6 +150,9 @@ It provides information needed to link your code. It can be used to configure me
 					<signal bit="28" mux="0" name="RXERR" pin="14" port="E"/>
 					<signal bit="18" mux="0" name="PTPPPS" pin="9" port="C"/>
 				</peripheral>
+				<peripheral description="TIMER Module" name="TIMER0">
+					<signal bit="8" mux="1" name="TMR1" pin="4" port="G"/>
+				</peripheral>
 				<gpio name="Port B">
 					<signal bit="26" name="PB13" pin="13" port="B"/>
 					<signal bit="28" name="PB14" pin="14" port="B"/>
@@ -182,6 +185,7 @@ It provides information needed to link your code. It can be used to configure me
 					<signal bit="0" name="PG00" pin="0" port="G"/>
 					<signal bit="4" name="PG02" pin="2" port="G"/>
 					<signal bit="6" name="PG03" pin="3" port="G"/>
+					<signal bit="8" name="PG04" pin="4" port="G"/>
 					<signal bit="10" name="PG05" pin="5" port="G"/>
 					<signal bit="12" name="PG06" pin="6" port="G"/>
 				</gpio>

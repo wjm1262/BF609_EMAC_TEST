@@ -14,7 +14,7 @@
 #include "mem_manager.h"
 
 extern volatile int g_ACKOK_XMT_Completed ;
-
+extern char VersionString[128] ;
 /*
  * BF609 Ethernet command Macro
  */
