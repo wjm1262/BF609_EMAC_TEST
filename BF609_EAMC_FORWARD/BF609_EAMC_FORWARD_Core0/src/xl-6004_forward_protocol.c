@@ -26,7 +26,7 @@ static BF609_COMM_ACK_CODE ProcessUpdateVersion(const CONTROL_FRAME *pCtrlDataBu
 
 /////////////////////////////////
 volatile int g_ACKOK_XMT_Completed = 0;
-char VersionString[128] = "Version 3.0.2. ";
+char VersionString[128] = "Version 1.2.1. ";
 
 /*
  * 控制域
@@ -50,54 +50,7 @@ FORWARD_ETHER_FRAME board_info =
 	{0}
 };
 
-/********************/
-//NOTES: if the SMVFrame more than 1500 bytes, then it is been cut off to 1500 bytes.
-ADI_ETHER_BUFFER *PackForwardSMVFrame ( uint32_t unNanoSecond, char *SMVFrame,
-		uint16_t SmvFrmLen, ETH_CFG_INFO *bsInfo )
-{
-
-	ADI_ETHER_BUFFER *tx;
-
-	char *head, *data, *Dst;
-
-	uint16_t  PayLoadLen = SmvFrmLen;
-	uint16_t HeaderLen =14;
-
-
-	if( PayLoadLen > MAX_ETHER_FRAME_LEN )
-	{
-		//if the SMVFrame more than 1500 bytes, then it is been cut off to 1500 bytes.
-		//DEBUG_PRINT ( "PackForwardSMVFrame: frame (Len:%d) more than MAX_ETHER_FRAME_LEN (Len:%d), cut off to 1500bytes.\n\n", SmvFrmLen, MAX_ETHER_FRAME_LEN );
-		PayLoadLen = MAX_ETHER_FRAME_LEN;
-	}
-
-	// remove first free one from the list
-	tx = pop_queue ( &bsInfo->xmt_queue );
-
-	if ( tx == NULL )
-	{
-		DEBUG_STATEMENT ( "PackForwardSMVFrame: xmt_queue no free buff!\n\n " );
-		return NULL;
-	}
-
-	// copy data from pbuf(s) into our buffer
-	data = SMVFrame;
-	head = ( char * ) tx->Data;
-	PackForwardSMVFrmHeader ( head, unNanoSecond, PayLoadLen);
-
-	// the first two bytes reserved for length
-	Dst = ( char * ) tx->Data + 2 + HeaderLen;
-
-	memcpy ( Dst, data, PayLoadLen );
-
-	tx->ElementCount = HeaderLen + PayLoadLen + 2; // total element count including 2 byte header
-	tx->PayLoad =  0; // payload is part of the packet
-	tx->StatusWord = 0; // changes from 0 to the status info
-
-	return tx;
-}
-
-void PackForwardSMVFrmHeader ( void *pForwardFrmHeader, uint32_t unNanoSecond,
+static void PackForwardSMVFrmHeader ( void *pForwardFrmHeader, uint32_t unNanoSecond,
 		uint16_t unPktDataLen )
 {
 	FORWARD_ETHER_FRAME* pHeader = (FORWARD_ETHER_FRAME*)pForwardFrmHeader;
@@ -119,6 +72,86 @@ void PackForwardSMVFrmHeader ( void *pForwardFrmHeader, uint32_t unNanoSecond,
 	pHeader->LTfield[1] = BF609_FORWARD_SMV_TYPE_HI_BASE + board_info.MUAddr;
 }
 
+/********************/
+/* CreateForwardSMVFrame: copy the data from SMVFrame to a new buffer, so uses 'memcpy',
+ * 						which is high time consumption.(for 30000ns)
+ *
+ * PackForwardSMVFrame: there are 14 bytes reserved at the head of original recv
+ * 						buffer (see 'set_descriptor' ), so, only to need pack ForwardSMVFrmHeader
+ * 						at the reserved room,which is low time consumption.(for 1600ns)
+ */
+//NOTES: if the SMVFrame more than 1500 bytes, then it is been cut off to 1500 bytes.
+ADI_ETHER_BUFFER *CreateForwardSMVFrame ( uint32_t unNanoSecond, char *SMVFrame,
+		uint16_t SmvFrmLen, ETH_CFG_INFO *bsInfo )
+{
+
+	ADI_ETHER_BUFFER *tx;
+
+	char *head, *data, *Dst;
+
+	uint16_t  PayLoadLen = SmvFrmLen;
+	uint16_t HeaderLen =14;
+
+
+	if( PayLoadLen > MAX_ETHER_FRAME_LEN )
+	{
+		//if the SMVFrame more than 1500 bytes, then it is been cut off to 1500 bytes.
+		//DEBUG_PRINT ( "PackForwardSMVFrame: frame (Len:%d) more than MAX_ETHER_FRAME_LEN (Len:%d), cut off to 1500bytes.\n\n", SmvFrmLen, MAX_ETHER_FRAME_LEN );
+		PayLoadLen = MAX_ETHER_FRAME_LEN;
+	}
+
+	// remove first free one from the list
+	tx = pop_queue ( &bsInfo->xmt_buffers_queue );
+
+	if ( tx == NULL )
+	{
+		DEBUG_STATEMENT ( "PackForwardSMVFrame: xmt_queue no free buff!\n\n " );
+		return NULL;
+	}
+
+	// copy data from pbuf(s) into our buffer
+	data = SMVFrame;
+	head = ( char * ) tx->Data;
+	PackForwardSMVFrmHeader ( head, unNanoSecond, PayLoadLen);
+
+	// the first two bytes reserved for length
+	Dst = ( char * ) tx->Data + 2 + HeaderLen;
+
+	memcpy ( Dst, data, PayLoadLen );//
+
+	tx->ElementCount = HeaderLen + PayLoadLen + 2; // total element count including 2 byte header
+	tx->PayLoad =  0; // payload is part of the packet
+	tx->StatusWord = 0; // changes from 0 to the status info
+
+	return tx;
+}
+/*
+ * */
+ADI_ETHER_BUFFER *PackForwardSMVFrame( uint32_t unNanoSecond, ADI_ETHER_BUFFER *pSrcEthBuf,
+		uint16_t SmvFrmLen )
+{
+
+	ADI_ETHER_BUFFER *tx = pSrcEthBuf;
+
+	char *head;
+
+	uint16_t  PayLoadLen = SmvFrmLen;
+	uint16_t HeaderLen =14;
+
+	// 	// the first two bytes reserved for length
+	head = (char*)tx->Data;
+	PackForwardSMVFrmHeader ( head, unNanoSecond, PayLoadLen);
+
+
+	tx->ElementCount = HeaderLen + PayLoadLen + 2; // total element count including 2 byte header
+	tx->PayLoad =  0; // payload is part of the packet
+	tx->StatusWord = 0; // changes from 0 to the status info
+
+	return tx;
+}
+
+
+
 ADI_ETHER_BUFFER *PackACKFrmOfUpdateVerion ( BF609_COMM_ACK_CODE AckCode,
 		void *pCtrlInfoFrmBuf, ETH_CFG_INFO *bsInfo )
 {
@@ -135,7 +168,7 @@ ADI_ETHER_BUFFER *PackACKFrmOfUpdateVerion ( BF609_COMM_ACK_CODE AckCode,
 	pRxData = (FORWARD_ETHER_FRAME *)pCtrlInfoFrmBuf;
 
 	// remove first free one from the list
-	tx = pop_queue ( &bsInfo->xmt_queue );
+	tx = pop_queue ( &bsInfo->xmt_buffers_queue );
 	if ( tx == NULL )
 	{
 		DEBUG_STATEMENT ( " PackEtherFrame:  xmt_queue IS no free buff!\n\n " );
@@ -202,7 +235,7 @@ ADI_ETHER_BUFFER *PackACKFrmOfReadVersion ( void *pCtrlInfoFrmBuf, ETH_CFG_INFO 
 	pRxData = (FORWARD_ETHER_FRAME *)pCtrlInfoFrmBuf;
 
 	// remove first free one from the list
-	tx = pop_queue ( &bsInfo->xmt_queue );
+	tx = pop_queue ( &bsInfo->xmt_buffers_queue );
 	if ( tx == NULL )
 	{
 		DEBUG_STATEMENT ( " PackEtherFrame:  xmt_queue IS no free buff!\n\n " );

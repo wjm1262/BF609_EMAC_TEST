@@ -861,17 +861,17 @@ static void process_int ( ADI_EMAC_DEVICE *pDev, ADI_EMAC_CHANNEL *pChannel )
 			switch ( flag )
 			{
 				case 0:
-					pTmp->RxTimeStamp.TimeStampLo = flag;
+					pTmp->RxTimeStamp.TimeStampLo = pCurDmaDesc->Status & 0xffFF;
 					pTmp->RxTimeStamp.TimeStampHi = 0xeeeeeeee;
 					break;
 					
 				case 1:
-					pTmp->RxTimeStamp.TimeStampLo = flag;
+					pTmp->RxTimeStamp.TimeStampLo = pCurDmaDesc->Status & 0xffFF;
 					pTmp->RxTimeStamp.TimeStampHi = 0xeeeeeeee;
 					break;
 					
 				case 2:
-					pTmp->RxTimeStamp.TimeStampLo = flag;
+					pTmp->RxTimeStamp.TimeStampLo = pCurDmaDesc->Status & 0xffFF;
 					pTmp->RxTimeStamp.TimeStampHi = 0xeeeeeeee;
 					break;
 					
@@ -1196,7 +1196,7 @@ static void handle_auxiliary_tm_interrupt(	ADI_ETHER_HANDLE phDevice, const Time
 
 		}
 #endif
-		DEBUG_PRINT("aux:< %10d.%-9d > int:(%10d %-9d) adj: %d \n\n", pAuxiTimeStamp->seconds, pAuxiTimeStamp->nanoseconds, tmInternal.seconds, tmInternal.nanoseconds, adjAddend);
+//		DEBUG_PRINT("aux:< %10d.%-9d > int:(%10d %-9d) adj: %d \n\n", pAuxiTimeStamp->seconds, pAuxiTimeStamp->nanoseconds, tmInternal.seconds, tmInternal.nanoseconds, adjAddend);
 	}//if(g_AuxiTMIsFirstUpdated == 1)
 
 
@@ -2326,7 +2326,7 @@ static void  set_descriptor ( ADI_ETHER_HANDLE hDevice,
 	
 	if ( pChannel->Recv )
 	{
-#if 0
+#if 1
 		/*****added by wjm@2014-10-20, reserved 14 bytes for the forward
 		 *  header (FORWARD_ETHER_FRAME )*****/
 		pDmaDesc->StartAddr   = ( uint32_t ) ( ( uint8_t * ) pBindedBuf->Data + 2 + 14 );
@@ -2336,9 +2336,9 @@ static void  set_descriptor ( ADI_ETHER_HANDLE hDevice,
 			pDmaDesc->StartAddr   = ( uint32_t ) ( ( uint8_t * ) pBindedBuf->Data + 2 );
 		}
 		/**********/
-#endif
+#else
 		pDmaDesc->StartAddr   = ( uint32_t ) ( ( uint8_t * ) pBindedBuf->Data + 2 );
-
+#endif
 		pDmaDesc->ControlDesc |= ( 1UL << 14 );
 		
 		/* data cache is enabled flush and invalidate the cache for entire data area */

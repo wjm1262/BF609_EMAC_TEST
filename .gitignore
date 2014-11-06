@@ -1,6 +1,13 @@
 # COM Files
 BF609_EAMC_FORWARD_Core1/
 *.txt
+*.bak
+*.xlsx
+*.xls
+*.bkp
+*.tdl
+*.tdlex
+
 
 # Compiled Object files
 *.slo
