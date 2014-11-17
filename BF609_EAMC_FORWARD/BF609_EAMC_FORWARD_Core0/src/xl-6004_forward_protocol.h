@@ -153,12 +153,22 @@ extern "C"  {
 
 void HandleControlMessage(void *pBuf);
 
-ADI_ETHER_BUFFER *PackForwardSMVFrame ( uint32_t unNanoSecond, char *SMVFrame,
+/* CreateForwardSMVFrame: copy the data from SMVFrame to a new buffer, so uses 'memcpy',
+ * 						which is high time consumption.(for 30000ns)
+ *
+ * PackForwardSMVFrame: there are 14 bytes reserved at the head of original recv
+ * 						buffer (see 'set_descriptor' ), so, only to need pack ForwardSMVFrmHeader
+ * 						at the reserved room,which is low time consumption.(for 1600ns)
+ */
+
+//NOTES: if the SMVFrame more than 1500 bytes, then it is been cut off to 1500 bytes.
+ADI_ETHER_BUFFER *CreateForwardSMVFrame ( uint32_t unNanoSecond, char *SMVFrame,
 		uint16_t SmvFrmLen, ETH_CFG_INFO *bsInfo );
 
-void PackForwardSMVFrmHeader ( void *pForwardFrmHeader,
-		uint32_t unNanoSecond,
-		uint16_t unPktDataLen );
+ADI_ETHER_BUFFER *PackForwardSMVFrame( uint32_t unNanoSecond, ADI_ETHER_BUFFER *pSrcEthBuf,
+		uint16_t SmvFrmLen );
+
+
 
 ADI_ETHER_BUFFER *PackACKFrmOfUpdateVerion ( BF609_COMM_ACK_CODE AckCode,
 													void *pCtrlInfoFrmBuf,

@@ -559,14 +559,33 @@ void stop_transfers ( ADI_ETHER_HANDLE phDevice )
 	gemac_stop_rx ( phDevice );
 	EXIT_CRITICAL_REGION();
 }
-//To re-start the operation, first start the DMA,
-//and then enable the MAC transmitter and receiver.
+
+
 void restart_transfers ( ADI_ETHER_HANDLE phDevice )
 {
 	uint32_t reg_data;
 	ADI_EMAC_DEVICE    *const  pDev      = ( ADI_EMAC_DEVICE * ) phDevice ;
 	ADI_EMAC_REGISTERS *const  pEmacRegs = pDev->pEMAC_REGS;
 
+	/********* Make sure that both the transmit and receive FIFOs are empty (hwr_bf60x P23-88)***/
+	/*********Begin: added by wjm@2014-11-11. NOTES: but have no tests ********/
+	//Wait for any previous frame transmissions to complete
+	while(pEmacRegs->EMAC_DBG & BITM_EMAC_DBG_TXFIFONE)
+	{
+		asm("nop;");
+	}
+
+	//after ensuring that the data in the receive FIFO is transferred
+	//to the system memory by reading the EMAC_DBG register.
+	while( (pEmacRegs->EMAC_DBG & BITM_EMAC_DBG_RXFIFOST) != ENUM_EMAC_DBG_FIFO_EMPTY)
+	{
+		asm("nop;");
+	}
+	/********* End: added by wjm@2014-11-11 ********/
+
+
+	//To re-start the operation, first start the DMA,
+	//and then enable the MAC transmitter and receiver.
 	pEmacRegs->EMAC_DMA_OPMODE |= (BITM_EMAC_DMA_OPMODE_SR| BITM_EMAC_DMA_OPMODE_ST);
 
 	reg_data = pEmacRegs->EMAC_MACCFG;
@@ -2326,7 +2345,11 @@ static void  set_descriptor ( ADI_ETHER_HANDLE hDevice,
 	
 	if ( pChannel->Recv )
 	{
-#if 0
+
+#if COPY_SVFRM
+		pDmaDesc->StartAddr   = ( uint32_t ) ( ( uint8_t * ) pBindedBuf->Data + 2 );
+#else
+
 		/*****added by wjm@2014-10-20, reserved 14 bytes for the forward
 		 *  header (FORWARD_ETHER_FRAME )*****/
 		pDmaDesc->StartAddr   = ( uint32_t ) ( ( uint8_t * ) pBindedBuf->Data + 2 + 14 );
@@ -2337,8 +2360,6 @@ static void  set_descriptor ( ADI_ETHER_HANDLE hDevice,
 		}
 		/**********/
 #endif
-		pDmaDesc->StartAddr   = ( uint32_t ) ( ( uint8_t * ) pBindedBuf->Data + 2 );
-
 		pDmaDesc->ControlDesc |= ( 1UL << 14 );
 		
 		/* data cache is enabled flush and invalidate the cache for entire data area */

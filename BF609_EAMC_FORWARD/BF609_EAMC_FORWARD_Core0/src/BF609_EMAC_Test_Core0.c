@@ -279,7 +279,7 @@ void HandleLoop(void)
 {
 	FORWARD_ETHER_FRAME* pForwardFrm = NULL;
 
-	ADI_ETHER_BUFFER *pRecv = NULL,*pSend = NULL;
+	ADI_ETHER_BUFFER *pRecv = NULL,*pSend = NULL, *pCopyRecv = NULL;
 
 	RX_TX_TIME_STAMP_BUFFER *pTmBuff = NULL;
 
@@ -304,8 +304,17 @@ void HandleLoop(void)
 			FrmLen = pRecv->ProcessedElementCount - 6; //adi_gemac.c process_int ÖÐ ¼ÓÁË6 bytes£¬WHY???
 
 			//send a frame by emac1
-			pSend = PackForwardSMVFrame ( nanSeconds, (char*)pRecv->Data +2,
+#if COPY_SVFRM
+			pSend = CreateForwardSMVFrame ( nanSeconds, (char*)pRecv->Data +2,
 					FrmLen,  &user_net_config_info[1] );
+#else
+			pSend = pop_queue ( &(user_net_config_info[1].xmt_queue) );
+
+			pCopyRecv = pRecv;
+			pRecv = pSend;
+			pSend = PackForwardSMVFrame ( nanSeconds, pCopyRecv,FrmLen);
+
+#endif
 
 			EtherSend ( g_hDev[1], pSend );
 

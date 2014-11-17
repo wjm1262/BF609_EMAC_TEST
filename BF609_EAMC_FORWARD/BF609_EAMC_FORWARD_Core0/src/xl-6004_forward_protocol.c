@@ -50,9 +50,38 @@ FORWARD_ETHER_FRAME board_info =
 	{0}
 };
 
+static void PackForwardSMVFrmHeader ( void *pForwardFrmHeader, uint32_t unNanoSecond,
+		uint16_t unPktDataLen )
+{
+	FORWARD_ETHER_FRAME* pHeader = (FORWARD_ETHER_FRAME*)pForwardFrmHeader;
+
+	pHeader->NoBytes    = 14 + unPktDataLen;//only the frame size excluding 2 byte header
+	pHeader->DestMAC[0] = board_info.DestMAC[0];
+	pHeader->DestMAC[1] = board_info.DestMAC[1];
+	pHeader->DestMAC[2] = board_info.DestMAC[2];
+	pHeader->DestMAC[3] = board_info.DestMAC[3];
+	pHeader->DestMAC[4] = board_info.DestMAC[4];
+	pHeader->DestMAC[5] = board_info.DestMAC[5];
+
+	pHeader->TimeStamp 	= unNanoSecond;
+
+	pHeader->MUAddr 	= board_info.MUAddr; //
+	pHeader->CtrlField 	= BF609_FORWARD_SMV_PC;//forward smv
+
+	pHeader->LTfield[0] = BF609_FORWARD_SMV_TYPE_LO;
+	pHeader->LTfield[1] = BF609_FORWARD_SMV_TYPE_HI_BASE + board_info.MUAddr;
+}
+
 /********************/
+/* CreateForwardSMVFrame: copy the data from SMVFrame to a new buffer, so uses 'memcpy',
+ * 						which is high time consumption.(for 30000ns)
+ *
+ * PackForwardSMVFrame: there are 14 bytes reserved at the head of original recv
+ * 						buffer (see 'set_descriptor' ), so, only to need pack ForwardSMVFrmHeader
+ * 						at the reserved room,which is low time consumption.(for 1600ns)
+ */
 //NOTES: if the SMVFrame more than 1500 bytes, then it is been cut off to 1500 bytes.
-ADI_ETHER_BUFFER *PackForwardSMVFrame ( uint32_t unNanoSecond, char *SMVFrame,
+ADI_ETHER_BUFFER *CreateForwardSMVFrame ( uint32_t unNanoSecond, char *SMVFrame,
 		uint16_t SmvFrmLen, ETH_CFG_INFO *bsInfo )
 {
 
@@ -88,7 +117,7 @@ ADI_ETHER_BUFFER *PackForwardSMVFrame ( uint32_t unNanoSecond, char *SMVFrame,
 	// the first two bytes reserved for length
 	Dst = ( char * ) tx->Data + 2 + HeaderLen;
 
-	memcpy ( Dst, data, PayLoadLen );
+	memcpy ( Dst, data, PayLoadLen );//
 
 	tx->ElementCount = HeaderLen + PayLoadLen + 2; // total element count including 2 byte header
 	tx->PayLoad =  0; // payload is part of the packet
@@ -96,27 +125,29 @@ ADI_ETHER_BUFFER *PackForwardSMVFrame ( uint32_t unNanoSecond, char *SMVFrame,
 
 	return tx;
 }
-
-void PackForwardSMVFrmHeader ( void *pForwardFrmHeader, uint32_t unNanoSecond,
-		uint16_t unPktDataLen )
+/*
+ * */
+ADI_ETHER_BUFFER *PackForwardSMVFrame( uint32_t unNanoSecond, ADI_ETHER_BUFFER *pSrcEthBuf,
+		uint16_t SmvFrmLen )
 {
-	FORWARD_ETHER_FRAME* pHeader = (FORWARD_ETHER_FRAME*)pForwardFrmHeader;
 
-	pHeader->NoBytes    = 14 + unPktDataLen;//only the frame size excluding 2 byte header
-	pHeader->DestMAC[0] = board_info.DestMAC[0];
-	pHeader->DestMAC[1] = board_info.DestMAC[1];
-	pHeader->DestMAC[2] = board_info.DestMAC[2];
-	pHeader->DestMAC[3] = board_info.DestMAC[3];
-	pHeader->DestMAC[4] = board_info.DestMAC[4];
-	pHeader->DestMAC[5] = board_info.DestMAC[5];
+	ADI_ETHER_BUFFER *tx = pSrcEthBuf;
 
-	pHeader->TimeStamp 	= unNanoSecond;
+	char *head;
 
-	pHeader->MUAddr 	= board_info.MUAddr; //
-	pHeader->CtrlField 	= BF609_FORWARD_SMV_PC;//forward smv
+	uint16_t  PayLoadLen = SmvFrmLen;
+	uint16_t HeaderLen =14;
 
-	pHeader->LTfield[0] = BF609_FORWARD_SMV_TYPE_LO;
-	pHeader->LTfield[1] = BF609_FORWARD_SMV_TYPE_HI_BASE + board_info.MUAddr;
+	// 	// the first two bytes reserved for length
+	head = (char*)tx->Data;
+	PackForwardSMVFrmHeader ( head, unNanoSecond, PayLoadLen);
+
+
+	tx->ElementCount = HeaderLen + PayLoadLen + 2; // total element count including 2 byte header
+	tx->PayLoad =  0; // payload is part of the packet
+	tx->StatusWord = 0; // changes from 0 to the status info
+
+	return tx;
 }
 
 ADI_ETHER_BUFFER *PackACKFrmOfUpdateVerion ( BF609_COMM_ACK_CODE AckCode,
