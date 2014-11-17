@@ -26,7 +26,7 @@ static BF609_COMM_ACK_CODE ProcessUpdateVersion(const CONTROL_FRAME *pCtrlDataBu
 
 /////////////////////////////////
 volatile int g_ACKOK_XMT_Completed = 0;
-char VersionString[128] = "Version 3.0.2. ";
+char VersionString[128] = "Version 1.2.1. ";
 
 /*
  * 控制域
@@ -101,7 +101,7 @@ ADI_ETHER_BUFFER *CreateForwardSMVFrame ( uint32_t unNanoSecond, char *SMVFrame,
 	}
 
 	// remove first free one from the list
-	tx = pop_queue ( &bsInfo->xmt_queue );
+	tx = pop_queue ( &bsInfo->xmt_buffers_queue );
 
 	if ( tx == NULL )
 	{
@@ -150,6 +150,8 @@ ADI_ETHER_BUFFER *PackForwardSMVFrame( uint32_t unNanoSecond, ADI_ETHER_BUFFER *
 	return tx;
 }
 
+
+
 ADI_ETHER_BUFFER *PackACKFrmOfUpdateVerion ( BF609_COMM_ACK_CODE AckCode,
 		void *pCtrlInfoFrmBuf, ETH_CFG_INFO *bsInfo )
 {
@@ -166,7 +168,7 @@ ADI_ETHER_BUFFER *PackACKFrmOfUpdateVerion ( BF609_COMM_ACK_CODE AckCode,
 	pRxData = (FORWARD_ETHER_FRAME *)pCtrlInfoFrmBuf;
 
 	// remove first free one from the list
-	tx = pop_queue ( &bsInfo->xmt_queue );
+	tx = pop_queue ( &bsInfo->xmt_buffers_queue );
 	if ( tx == NULL )
 	{
 		DEBUG_STATEMENT ( " PackEtherFrame:  xmt_queue IS no free buff!\n\n " );
@@ -233,7 +235,7 @@ ADI_ETHER_BUFFER *PackACKFrmOfReadVersion ( void *pCtrlInfoFrmBuf, ETH_CFG_INFO 
 	pRxData = (FORWARD_ETHER_FRAME *)pCtrlInfoFrmBuf;
 
 	// remove first free one from the list
-	tx = pop_queue ( &bsInfo->xmt_queue );
+	tx = pop_queue ( &bsInfo->xmt_buffers_queue );
 	if ( tx == NULL )
 	{
 		DEBUG_STATEMENT ( " PackEtherFrame:  xmt_queue IS no free buff!\n\n " );
