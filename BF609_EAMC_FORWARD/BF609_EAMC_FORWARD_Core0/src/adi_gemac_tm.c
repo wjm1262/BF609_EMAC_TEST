@@ -559,8 +559,8 @@ void stop_transfers ( ADI_ETHER_HANDLE phDevice )
 	gemac_stop_rx ( phDevice );
 	EXIT_CRITICAL_REGION();
 }
-//To re-start the operation, first start the DMA,
-//and then enable the MAC transmitter and receiver.
+
+
 void restart_transfers ( ADI_ETHER_HANDLE phDevice )
 {
 	uint32_t reg_data;
