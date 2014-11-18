@@ -202,9 +202,9 @@ void main ( void )
 	nEtherDevUsed = 1;
 #endif
 
-	snprintf(VersionString + 15, 100, "Board ID:%d, Built on %s, at %s ", board_info.MUAddr, __DATE__, __TIME__);
+	snprintf(VersionString + 15, 100, "Board ID:%d. Built on %s, at %s ", board_info.MUAddr, __DATE__, __TIME__);
 
-	DEBUG_PRINT ( " %s \n\n" , VersionString);
+	DEBUG_PRINT ( " %s. \n\n" , VersionString);
 	DEBUG_STATEMENT ( " init EMAC\n\n" );
 
 	for ( i = 0; i < nEtherDevUsed; i++ )
@@ -279,7 +279,7 @@ void HandleLoop(void)
 {
 	FORWARD_ETHER_FRAME* pForwardFrm = NULL;
 
-	ADI_ETHER_BUFFER *pRecv = NULL,*pSend = NULL;
+	ADI_ETHER_BUFFER *pRecv = NULL,*pSend = NULL, *pCopyRecv = NULL;
 
 	RX_TX_TIME_STAMP_BUFFER *pTmBuff = NULL;
 
@@ -301,11 +301,29 @@ void HandleLoop(void)
 			nanSeconds = ( unsigned int ) ( pTmBuff->RxTimeStamp.TimeStampLo ) ;
 
 			// get frame length
-			FrmLen = pRecv->ProcessedElementCount - 6; //adi_gemac.c process_int 中 加了6 bytes，WHY???
+			FrmLen = pRecv->ProcessedElementCount - 6; //adi_gemac.c process_int 中 加了6 bytes，WHY???2 + 4crc byte
 
 			//send a frame by emac1
-			pSend = PackForwardSMVFrame ( nanSeconds, (char*)pRecv->Data +2,
+
+#if COPY_SVFRM
+			pSend = CreateForwardSMVFrame ( nanSeconds, (char*)pRecv->Data +2,
 					FrmLen,  &user_net_config_info[1] );
+#else
+			pSend = pop_queue ( &(user_net_config_info[1].xmt_buffers_queue) );
+			pCopyRecv = pRecv;
+			pRecv = pSend;
+			pSend = PackForwardSMVFrame ( nanSeconds, pCopyRecv,FrmLen);
+
+#endif
+
+
+//			tmEnd.seconds = pEmacRegs->EMAC_TM_SEC;
+//			tmEnd.nanoseconds = pEmacRegs->EMAC_TM_NSEC;
+//
+//			EXIT_CRITICAL_REGION();
+//			subTime (&tmStart, &tmEnd, &tmStart );
+//			DEBUG_PRINT ("sec:%d, nanoSec:%d \n\n", tmStart.seconds, tmStart.nanoseconds);
+
 
 			EtherSend ( g_hDev[1], pSend );
 
@@ -336,8 +354,6 @@ void HandleLoop(void)
 		}
 	}//while
 }
-
-
 
 /////////////CALL_BACK
 void External_PPS_Trigger_Callback (
@@ -390,7 +406,7 @@ void Ethernet0_Callback ( void *arg1, unsigned int event, void *FrameBuffers )
 		{
 		
 			case ADI_ETHER_EVENT_FRAME_RCVD:
-			
+#if 0
 				while ( pack_list )
 				{
 					pRecv = pack_list;
@@ -405,15 +421,16 @@ void Ethernet0_Callback ( void *arg1, unsigned int event, void *FrameBuffers )
 					EnQueue ( &user_net_config_info[0].rx_completed_q, pRecv );
 					
 				}
-				
+#endif
+
+				push_queue ( &user_net_config_info[0].rx_completed_queue, pack_list );
+
+
 				break;
 				
 			case ADI_ETHER_EVENT_FRAME_XMIT:
 			
-				if ( pack_list )
-				{
-					push_queue ( &user_net_config_info[0].xmt_queue, pack_list );
-				}
+				push_queue ( &user_net_config_info[0].xmt_buffers_queue, pack_list );
 				
 				break;
 				
@@ -452,7 +469,7 @@ void Ethernet1_Callback ( void *arg1, unsigned int event, void *FrameBuffers )
 		{
 		
 			case ADI_ETHER_EVENT_FRAME_RCVD:
-			
+#if 0
 				while ( pack_list )
 				{
 					pRecv = pack_list;
@@ -461,48 +478,16 @@ void Ethernet1_Callback ( void *arg1, unsigned int event, void *FrameBuffers )
 					
 					EnQueue ( &user_net_config_info[1].rx_completed_q, pRecv );
 				}
-				
+#endif
+				push_queue ( &user_net_config_info[1].rx_completed_queue, pack_list );
+
 				break;
 				
 			case ADI_ETHER_EVENT_FRAME_XMIT:
-#if 0
-				while ( pack_list )
+
+				pXmt = pack_list;
+				while ( pXmt )
 				{
-					pXmt = pack_list;
-					pack_list = pack_list->pNext;
-					pXmt->pNext = NULL;
-
-					pPkt = ( ADI_ETHER_FRAME_BUFFER * ) ( pXmt->Data );
-
-					// forward SMV frame to PC
-					if( (pPkt->LTfield[0] == BF609_FORWARD_SMV_TYPE_LO) &&
-							(pPkt->LTfield[1] == BF609_FORWARD_SMV_TYPE_HI ))
-					{
-						//reuse buff, return the buff to EMAC0' RX Channel
-						pXmt->pNext = NULL;
-						pXmt->ProcessedElementCount = 0;
-						pXmt->ProcessedFlag = 0;
-						adi_ether_Read ( g_hDev[0], pXmt );
-					}
-					// send other frame to PC controller, such as ACK frame for control messages.
-					else
-					{
-						if( (pPkt->LTfield[0] == BF609_UPDATE_VER_ACKOK_TYPE_LO) &&
-								(pPkt->LTfield[1] == BF609_UPDATE_VER_ACKOK_TYPE_HI ))
-						{
-							g_ACKOK_XMT_Completed = 1;
-						}
-
-						push_queue ( &user_net_config_info[1].xmt_queue, pXmt );
-					}
-				}
-#endif
-				while ( pack_list )
-				{
-					pXmt = pack_list;
-					pack_list = pack_list->pNext;
-					pXmt->pNext = NULL;
-
 					pPkt = ( ADI_ETHER_FRAME_BUFFER * ) ( pXmt->Data );
 
 					if( (pPkt->LTfield[0] == BF609_UPDATE_VER_ACKOK_TYPE_LO) &&
@@ -511,9 +496,11 @@ void Ethernet1_Callback ( void *arg1, unsigned int event, void *FrameBuffers )
 						g_ACKOK_XMT_Completed = 1;
 					}
 
-					push_queue ( &user_net_config_info[1].xmt_queue, pXmt );
-
+					pXmt = pXmt->pNext;
 				}
+
+				push_queue ( &user_net_config_info[1].xmt_buffers_queue, pack_list );
+
 				break;
 				
 			case ADI_ETHER_EVENT_INTERRUPT:
@@ -575,9 +562,12 @@ ADI_ETHER_BUFFER *EtherRecv ( ADI_ETHER_HANDLE  const hDevice )
 	}
 
 	//一次返回一个
+#if 0
 	ENTER_CRITICAL_REGION();
 	DeQueue ( &user_net_config_info[nSelectedDev].rx_completed_q, ( QElem * ) &pack ) ;
 	EXIT_CRITICAL_REGION();
+#endif
+	pack = pop_queue ( &user_net_config_info[nSelectedDev].rx_completed_queue);
 	
 	return pack;
 	

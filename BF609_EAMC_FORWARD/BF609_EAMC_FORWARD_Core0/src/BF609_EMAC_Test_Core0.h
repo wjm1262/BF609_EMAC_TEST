@@ -24,6 +24,7 @@
 // check for four byte alignment
 #define MY_CHECK_ALIGNMENT(x) (((x+3)&(~0x3)) == x)
 
+#define COPY_SVFRM 1
 
 
 

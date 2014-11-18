@@ -46,11 +46,12 @@ ETH_CFG_INFO user_net_config_info[MAX_NETWORK_IF] =
 			{NULL, NULL, 0},
 			0,
 			0,
-		},
+			{NULL, NULL, 0},
+	},
 	{
 		0,
 		200,
-		4000,
+		6000,
 		1560,
 		1560,
 		0,
@@ -63,6 +64,7 @@ ETH_CFG_INFO user_net_config_info[MAX_NETWORK_IF] =
 		{NULL, NULL, 0},
 		0,
 		0,
+		{NULL, NULL, 0},
 	},
 
 };
@@ -98,10 +100,9 @@ static int InitFrameBuff ( ADI_ETHER_HANDLE  const hDevice, ETH_CFG_INFO *bsInfo
 	if ( !bsInfo->buff_area || 0 >= bsInfo->buff_area_size )
 		return -1;
 
-	clear_queue ( &bsInfo->xmt_queue );
+	clear_queue ( &bsInfo->xmt_buffers_queue );
+	clear_queue ( &bsInfo->rx_completed_queue );
 
-	InitQueue ( &bsInfo->rx_completed_q );
-	InitQueue ( &bsInfo->tx_completed_q );
 
 	// calculate total requirement for each rx and tx buffer
 
@@ -153,7 +154,7 @@ static int InitFrameBuff ( ADI_ETHER_HANDLE  const hDevice, ETH_CFG_INFO *bsInfo
 
 			if ( 0 == n )
 			{
-				bsInfo->xmt_queue.pQueueTail = p;
+				bsInfo->xmt_buffers_queue.pQueueTail = p;
 			}
 		}
 	}
@@ -204,8 +205,9 @@ static int InitFrameBuff ( ADI_ETHER_HANDLE  const hDevice, ETH_CFG_INFO *bsInfo
 	bsInfo->rcv_list = rx_head;
 
 	// save the list of tx buffers until they are needed
-	bsInfo->xmt_queue.pQueueHead = tx_head;
-	bsInfo->xmt_queue.ElementCount = bsInfo->tx_buffs;
+
+	bsInfo->xmt_buffers_queue.pQueueHead = tx_head;
+	bsInfo->xmt_buffers_queue.ElementCount = bsInfo->tx_buffs;
 
 	return 1;
 }

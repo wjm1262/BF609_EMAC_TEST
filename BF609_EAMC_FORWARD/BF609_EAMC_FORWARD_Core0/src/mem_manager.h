@@ -41,16 +41,16 @@ typedef struct eth_cfg_info
 	// lists of received/transmitted buffers awaiting to be submit to Dev'RX/TX Channel
 	ADI_ETHER_BUFFER         *rcv_list;
 	//ADI_ETHER_BUFFER*         xmt_list;
-	ADI_EMAC_FRAME_Q xmt_queue;
+	ADI_EMAC_FRAME_Q xmt_buffers_queue;
 
 	// keeps track if there is a already a post. if its zero stack callback handler will
 	// post the message, else it will be skipped.
 	//
 	int                       txmsg_processed;
 	int                       rxmsg_processed;
-	// lists of received/transmitted  buffers have been completed by EMAC awaiting APP processing/disposal
-	QType rx_completed_q;
-	QType tx_completed_q;
+	// queue of received buffers have been completed by EMAC awaiting APP processing/disposal
+	ADI_EMAC_FRAME_Q rx_completed_queue;
+	//ADI_EMAC_FRAME_Q tx_completed_queue;
 
 } ETH_CFG_INFO;
 
