@@ -182,9 +182,9 @@ void main ( void )
 
     Init_PTPAuxin();
 
-    CoreTimerInit();
+//    CoreTimerInit();
 
-    Init_Timer_Interrupts();
+//    Init_Timer_Interrupts();
 
 
 	/* configures the switches */
@@ -289,6 +289,11 @@ void HandleLoop(void)
 
 	unsigned int nanSeconds = 0;
 	BF609_COMM_ACK_CODE commRet;
+	TimeInternal tmStart = {0,0};
+	TimeInternal tmEnd = {0,0};
+
+	ADI_EMAC_DEVICE    *const  pDev      = ( ADI_EMAC_DEVICE * ) g_hDev[0];
+	ADI_EMAC_REGISTERS *const  pEmacRegs = ( ( ADI_EMAC_DEVICE * ) g_hDev[0] )->pEMAC_REGS;
 
 	while ( 1 )
 	{
