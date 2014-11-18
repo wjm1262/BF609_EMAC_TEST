@@ -205,6 +205,7 @@ static int InitFrameBuff ( ADI_ETHER_HANDLE  const hDevice, ETH_CFG_INFO *bsInfo
 	bsInfo->rcv_list = rx_head;
 
 	// save the list of tx buffers until they are needed
+
 	bsInfo->xmt_buffers_queue.pQueueHead = tx_head;
 	bsInfo->xmt_buffers_queue.ElementCount = bsInfo->tx_buffs;
 

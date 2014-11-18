@@ -8,7 +8,11 @@ BF609_EAMC_FORWARD_Core1/
 *.xls
 *.ldb
 *.cmp
+*.bak
 *.bkp
+*.tdl
+*.tdlex
+
 
 # Compiled Object files
 *.slo

@@ -1215,7 +1215,7 @@ static void handle_auxiliary_tm_interrupt(	ADI_ETHER_HANDLE phDevice, const Time
 
 		}
 #endif
-//		DEBUG_PRINT("aux:< %10d.%-9d > int:(%10d %-9d) adj: %d \n\n", pAuxiTimeStamp->seconds, pAuxiTimeStamp->nanoseconds, tmInternal.seconds, tmInternal.nanoseconds, adjAddend);
+		DEBUG_PRINT("aux:< %10d.%-9d > int:(%10d %-9d) adj: %d \n\n", pAuxiTimeStamp->seconds, pAuxiTimeStamp->nanoseconds, tmInternal.seconds, tmInternal.nanoseconds, adjAddend);
 	}//if(g_AuxiTMIsFirstUpdated == 1)
 
 
