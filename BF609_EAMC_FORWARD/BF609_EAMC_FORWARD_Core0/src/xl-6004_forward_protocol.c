@@ -26,7 +26,7 @@ static BF609_COMM_ACK_CODE ProcessUpdateVersion(const CONTROL_FRAME *pCtrlDataBu
 
 /////////////////////////////////
 volatile int g_ACKOK_XMT_Completed = 0;
-char VersionString[128] = "Version 1.2.1. ";
+char VersionString[128] = "Version 1.2.2. ";
 
 /*
  * 控制域
